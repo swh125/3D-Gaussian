@@ -17,6 +17,7 @@ NUM_DOWNSCALES="${NUM_DOWNSCALES:-2}"                   # 显存紧张可调大
 
 echo "[ns-process-data] input=${DATA_RAW}  out=${OUTPUT_DIR}  type=${INPUT_TYPE}  downscales=${NUM_DOWNSCALES}"
 
+# Try with hloc first (avoids COLMAP SIFT GPU parameter issue)
 if [[ "${INPUT_TYPE}" == "video" ]]; then
   ns-process-data video \
     --data "${DATA_RAW}" \
@@ -24,7 +25,10 @@ if [[ "${INPUT_TYPE}" == "video" ]]; then
     --num-downscales "${NUM_DOWNSCALES}" \
     --sfm-tool hloc \
     --feature-type superpoint \
-    --matcher-type superglue
+    --matcher-type superglue || {
+    echo "Warning: hloc processing failed, trying fallback..."
+    exit 1
+  }
 elif [[ "${INPUT_TYPE}" == "images" ]]; then
   ns-process-data images \
     --data "${DATA_RAW}" \
@@ -32,10 +36,30 @@ elif [[ "${INPUT_TYPE}" == "images" ]]; then
     --num-downscales "${NUM_DOWNSCALES}" \
     --sfm-tool hloc \
     --feature-type superpoint \
-    --matcher-type superglue
+    --matcher-type superglue || {
+    echo "Warning: hloc processing failed, trying fallback..."
+    exit 1
+  }
 else
   echo "ERROR: Unsupported INPUT_TYPE='${INPUT_TYPE}'. Use 'video' or 'images'."
   exit 1
+fi
+
+# Check if mapper failed due to SuiteSparse issue and retry with DENSE solver
+# This handles the case where hloc/colmap mapper fails because SuiteSparse is not available
+if [[ -f "${OUTPUT_DIR}/colmap/database.db" ]] && [[ ! -d "${OUTPUT_DIR}/colmap/sparse/0" ]]; then
+  echo "COLMAP sparse reconstruction missing. Retrying mapper with DENSE_SCHUR solver (avoids SuiteSparse requirement)..."
+  mkdir -p "${OUTPUT_DIR}/colmap/sparse"
+  colmap mapper \
+    --database_path "${OUTPUT_DIR}/colmap/database.db" \
+    --image_path "${OUTPUT_DIR}/images" \
+    --output_path "${OUTPUT_DIR}/colmap/sparse" \
+    --Mapper.ba_global_function_tolerance=1e-6 \
+    --Mapper.ba_global_sparse_linear_algebra_library_type=DENSE_SCHUR || {
+    echo "ERROR: COLMAP mapper failed even with DENSE_SCHUR solver."
+    exit 1
+  }
+  echo "Successfully completed COLMAP mapping with DENSE_SCHUR solver."
 fi
 
 echo "Done. Scene prepared at: ${OUTPUT_DIR}"
