@@ -9,7 +9,7 @@ set -euo pipefail
 # Requires: SAM checkpoint downloaded to third_party/segment-anything/sam_ckpt.
 
 # --------- USER CONFIG REQUIRED ----------
-IMAGE_ROOT="${IMAGE_ROOT:-$HOME/data/book}"    # processed scene root
+IMAGE_ROOT="${IMAGE_ROOT:-/home/bygpu/data/book_scene}"    # processed scene root
 MODEL_PATH="${MODEL_PATH:-}"                   # REQUIRED: trained 3DGS model directory (output of train_scene.py)
 SAM_CKPT="${SAM_CKPT:-third_party/segment-anything/sam_ckpt/sam_vit_h_4b8939.pth}"
 DOWNSAMPLE="${DOWNSAMPLE:-2}"                  # 1/2/4/8
