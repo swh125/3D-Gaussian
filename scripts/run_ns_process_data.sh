@@ -45,21 +45,21 @@ else
   exit 1
 fi
 
-# Check if mapper failed due to SuiteSparse issue and retry with DENSE solver
+# Check if mapper failed due to SuiteSparse issue and retry mapper manually
 # This handles the case where hloc/colmap mapper fails because SuiteSparse is not available
+# COLMAP 3.8 will automatically fall back to DENSE solver if SuiteSparse is not available
 if [[ -f "${OUTPUT_DIR}/colmap/database.db" ]] && [[ ! -d "${OUTPUT_DIR}/colmap/sparse/0" ]]; then
-  echo "COLMAP sparse reconstruction missing. Retrying mapper with DENSE_SCHUR solver (avoids SuiteSparse requirement)..."
+  echo "COLMAP sparse reconstruction missing. Retrying mapper (will auto-use DENSE solver if SuiteSparse unavailable)..."
   mkdir -p "${OUTPUT_DIR}/colmap/sparse"
   colmap mapper \
     --database_path "${OUTPUT_DIR}/colmap/database.db" \
     --image_path "${OUTPUT_DIR}/images" \
     --output_path "${OUTPUT_DIR}/colmap/sparse" \
-    --Mapper.ba_global_function_tolerance=1e-6 \
-    --Mapper.ba_global_sparse_linear_algebra_library_type=DENSE_SCHUR || {
-    echo "ERROR: COLMAP mapper failed even with DENSE_SCHUR solver."
+    --Mapper.ba_global_function_tolerance=1e-6 || {
+    echo "ERROR: COLMAP mapper failed."
     exit 1
   }
-  echo "Successfully completed COLMAP mapping with DENSE_SCHUR solver."
+  echo "Successfully completed COLMAP mapping."
 fi
 
 echo "Done. Scene prepared at: ${OUTPUT_DIR}"
