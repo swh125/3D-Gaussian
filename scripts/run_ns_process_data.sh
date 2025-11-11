@@ -45,20 +45,40 @@ else
   exit 1
 fi
 
-# Check if mapper failed due to SuiteSparse issue and retry mapper manually
+# Check if mapper failed due to SuiteSparse issue and retry with gaussian_splatting env's COLMAP
 # This handles the case where hloc/colmap mapper fails because SuiteSparse is not available
-# COLMAP 3.8 will automatically fall back to DENSE solver if SuiteSparse is not available
+# The gaussian_splatting environment's COLMAP 3.13.0 may have SuiteSparse support or better fallback
 if [[ -f "${OUTPUT_DIR}/colmap/database.db" ]] && [[ ! -d "${OUTPUT_DIR}/colmap/sparse/0" ]]; then
-  echo "COLMAP sparse reconstruction missing. Retrying mapper (will auto-use DENSE solver if SuiteSparse unavailable)..."
+  echo "COLMAP sparse reconstruction missing. Retrying mapper with gaussian_splatting env's COLMAP..."
   mkdir -p "${OUTPUT_DIR}/colmap/sparse"
-  colmap mapper \
-    --database_path "${OUTPUT_DIR}/colmap/database.db" \
-    --image_path "${OUTPUT_DIR}/images" \
-    --output_path "${OUTPUT_DIR}/colmap/sparse" \
-    --Mapper.ba_global_function_tolerance=1e-6 || {
-    echo "ERROR: COLMAP mapper failed."
-    exit 1
-  }
+  
+  # Try using gaussian_splatting environment's COLMAP (may have SuiteSparse support)
+  COLMAP_GS="${CONDA_PREFIX/nsdp/gaussian_splatting}/bin/colmap"
+  if [[ -f "${COLMAP_GS}" ]] || [[ -f "${HOME}/anaconda3/envs/gaussian_splatting/bin/colmap" ]]; then
+    if [[ -f "${HOME}/anaconda3/envs/gaussian_splatting/bin/colmap" ]]; then
+      COLMAP_GS="${HOME}/anaconda3/envs/gaussian_splatting/bin/colmap"
+    fi
+    echo "Using COLMAP from gaussian_splatting environment: ${COLMAP_GS}"
+    "${COLMAP_GS}" mapper \
+      --database_path "${OUTPUT_DIR}/colmap/database.db" \
+      --image_path "${OUTPUT_DIR}/images" \
+      --output_path "${OUTPUT_DIR}/colmap/sparse" \
+      --Mapper.ba_global_function_tolerance=1e-6 || {
+      echo "ERROR: COLMAP mapper failed even with gaussian_splatting env's COLMAP."
+      exit 1
+    }
+  else
+    # Fallback to current environment's colmap
+    echo "gaussian_splatting COLMAP not found, using current env's colmap..."
+    colmap mapper \
+      --database_path "${OUTPUT_DIR}/colmap/database.db" \
+      --image_path "${OUTPUT_DIR}/images" \
+      --output_path "${OUTPUT_DIR}/colmap/sparse" \
+      --Mapper.ba_global_function_tolerance=1e-6 || {
+      echo "ERROR: COLMAP mapper failed."
+      exit 1
+    }
+  fi
   echo "Successfully completed COLMAP mapping."
 fi
 
