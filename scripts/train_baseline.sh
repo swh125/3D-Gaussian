@@ -3,8 +3,8 @@ set -euo pipefail
 
 # Purpose: Train baseline 3D Gaussian Splatting on a processed scene.
 # Usage:
-#   chmod +x scripts/train_baseline.sh
 #   ./scripts/train_baseline.sh
+#   (If permission denied, run: chmod +x scripts/train_baseline.sh)
 #
 # Edit SCENE_ROOT to point to the directory produced by ns-process-data.
 
