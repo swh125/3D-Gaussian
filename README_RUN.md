@@ -2,6 +2,39 @@
 
 本文件提供“可直接提交/复现”的最小命令集合，所有命令已封装为脚本，助教无需手敲指令即可复现。
 
+## 🚀 一键运行（推荐）
+
+**最简单的方式：运行一键脚本，自动完成所有步骤**
+
+```bash
+# 1. 修改脚本中的路径（可选，已有默认值）
+# 编辑 scripts/run_baseline_pipeline.sh，修改以下变量：
+#   - DATA_RAW: 原始视频/图像路径
+#   - OUTPUT_DIR: 输出目录
+#   - SAM_CKPT: SAM checkpoint 路径
+
+# 2. 运行一键脚本
+chmod +x scripts/run_baseline_pipeline.sh
+./scripts/run_baseline_pipeline.sh
+```
+
+脚本会自动完成：
+1. ✅ 数据处理（ns-process-data + COLMAP）
+2. ✅ 基线训练（3D Gaussian Splatting）
+3. ✅ SAM 掩码提取和尺度计算
+4. ✅ 对比特征训练
+
+完成后，运行 GUI 分割：
+```bash
+python saga_gui.py --model_path <MODEL_PATH> --data_path <OUTPUT_DIR>
+```
+
+---
+
+## 📝 分步运行（如需调试）
+
+如果你想分步运行或调试，可以按以下步骤：
+
 ## 0. 环境要求
 - 已有可用 GPU + PyTorch + CUDA（能编译/加载本仓库 CUDA 扩展）
 - 已安装本仓库依赖（或直接使用 `environment.yml` 创建 `gaussian_splatting` 环境）
