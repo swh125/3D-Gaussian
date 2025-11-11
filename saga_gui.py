@@ -735,6 +735,9 @@ if __name__ == "__main__":
     parser.add_argument('-m', '--model_path', type=str, default="./output/figurines")
     parser.add_argument('-f', '--feature_iteration', type=int, default=10000)
     parser.add_argument('-s', '--scene_iteration', type=int, default=30000)
+    parser.add_argument('--width', type=int, default=None, help='Window width (default: auto-detect from training data)')
+    parser.add_argument('--height', type=int, default=None, help='Window height (default: auto-detect from training data)')
+    parser.add_argument('--data_path', type=str, default=None, help='Path to training data (for auto-detecting image dimensions)')
 
     args = parser.parse_args()
 
@@ -747,6 +750,80 @@ if __name__ == "__main__":
     opt.SCALE_GATE_PATH = os.path.join(opt.MODEL_PATH, f'point_cloud/iteration_{str(opt.FEATURE_GAUSSIAN_ITERATION)}/scale_gate.pt')
     opt.FEATURE_PCD_PATH = os.path.join(opt.MODEL_PATH, f'point_cloud/iteration_{str(opt.FEATURE_GAUSSIAN_ITERATION)}/contrastive_feature_point_cloud.ply')
     opt.SCENE_PCD_PATH = os.path.join(opt.MODEL_PATH, f'point_cloud/iteration_{str(opt.SCENE_GAUSSIAN_ITERATION)}/scene_point_cloud.ply')
+
+    # Auto-detect image dimensions if not specified
+    if args.width is None or args.height is None:
+        # Try to read from COLMAP camera parameters
+        data_path = args.data_path
+        if data_path is None:
+            # Try to infer from model path (common structure: output/xxx -> data/xxx)
+            # Or check if there's a cfg_args file that might contain source_path
+            cfg_args_path = os.path.join(opt.MODEL_PATH, 'cfg_args')
+            if os.path.exists(cfg_args_path):
+                try:
+                    with open(cfg_args_path, 'r') as f:
+                        for line in f:
+                            if 'source_path' in line or 'data_path' in line:
+                                # Extract path from line (simple parsing)
+                                parts = line.strip().split()
+                                for i, part in enumerate(parts):
+                                    if 'source_path' in part or 'data_path' in part:
+                                        if i + 1 < len(parts):
+                                            data_path = parts[i + 1].strip("'\"")
+                                            break
+                except:
+                    pass
+        
+        # Try to read image dimensions from COLMAP or images directory
+        if data_path and os.path.exists(data_path):
+            # Try COLMAP camera parameters first
+            colmap_cameras_path = os.path.join(data_path, 'colmap', 'sparse', '0', 'cameras.bin')
+            if not os.path.exists(colmap_cameras_path):
+                colmap_cameras_path = os.path.join(data_path, 'sparse', '0', 'cameras.bin')
+            
+            if os.path.exists(colmap_cameras_path):
+                try:
+                    from scene.colmap_loader import read_intrinsics_binary
+                    cameras = read_intrinsics_binary(colmap_cameras_path)
+                    if cameras:
+                        first_cam = list(cameras.values())[0]
+                        detected_width = first_cam.width
+                        detected_height = first_cam.height
+                        if args.width is None:
+                            opt.width = detected_width // opt.r
+                            opt.window_width = opt.width
+                        if args.height is None:
+                            opt.height = detected_height // opt.r
+                            opt.window_height = opt.height
+                        print(f"Auto-detected image dimensions: {detected_width}x{detected_height} (display: {opt.width}x{opt.height})")
+                except Exception as e:
+                    print(f"Warning: Could not read COLMAP cameras: {e}")
+            
+            # Fallback: try to read from images directory
+            if (args.width is None or args.height is None) and os.path.exists(os.path.join(data_path, 'images')):
+                try:
+                    import glob
+                    image_files = glob.glob(os.path.join(data_path, 'images', '*'))
+                    if image_files:
+                        img = Image.open(image_files[0])
+                        detected_width, detected_height = img.size
+                        if args.width is None:
+                            opt.width = detected_width // opt.r
+                            opt.window_width = opt.width
+                        if args.height is None:
+                            opt.height = detected_height // opt.r
+                            opt.window_height = opt.height
+                        print(f"Auto-detected image dimensions from image: {detected_width}x{detected_height} (display: {opt.width}x{opt.height})")
+                except Exception as e:
+                    print(f"Warning: Could not read image dimensions: {e}")
+    
+    # Override with user-specified dimensions
+    if args.width is not None:
+        opt.width = args.width
+        opt.window_width = args.width
+    if args.height is not None:
+        opt.height = args.height
+        opt.window_height = args.height
 
     gs_model = GaussianModel(opt.sh_degree)
     feat_gs_model = FeatureGaussianModel(opt.FEATURE_DIM)
