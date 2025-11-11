@@ -21,12 +21,18 @@ if [[ "${INPUT_TYPE}" == "video" ]]; then
   ns-process-data video \
     --data "${DATA_RAW}" \
     --output-dir "${OUTPUT_DIR}" \
-    --num-downscales "${NUM_DOWNSCALES}"
+    --num-downscales "${NUM_DOWNSCALES}" \
+    --sfm-tool hloc \
+    --feature-type superpoint \
+    --matcher-type superglue
 elif [[ "${INPUT_TYPE}" == "images" ]]; then
   ns-process-data images \
     --data "${DATA_RAW}" \
     --output-dir "${OUTPUT_DIR}" \
-    --num-downscales "${NUM_DOWNSCALES}"
+    --num-downscales "${NUM_DOWNSCALES}" \
+    --sfm-tool hloc \
+    --feature-type superpoint \
+    --matcher-type superglue
 else
   echo "ERROR: Unsupported INPUT_TYPE='${INPUT_TYPE}'. Use 'video' or 'images'."
   exit 1
