@@ -56,30 +56,28 @@ if [[ "${INPUT_TYPE}" == "video" ]]; then
       if [[ -d "${OUTPUT_DIR}/images" ]] && [[ -f "${OUTPUT_DIR}/colmap/database.db" ]]; then
         echo "Running COLMAP manually (without GPU parameter)..."
         cd "${OUTPUT_DIR}/colmap"
-        # Run feature extraction without GPU
+        # 1. 特征提取（最关键的步骤）
         colmap feature_extractor \
           --database_path database.db \
           --image_path ../images \
-          --ImageReader.single_camera 1 \
-          --ImageReader.camera_model OPENCV || {
+          --ImageReader.single_camera 1 || {
           echo "Error: COLMAP feature extraction failed."
           cd - > /dev/null
           exit 1
         }
-        # Run exhaustive matcher
+        # 2. 特征匹配
         colmap exhaustive_matcher \
           --database_path database.db || {
           echo "Error: COLMAP matching failed."
           cd - > /dev/null
           exit 1
         }
-        # Run mapper
+        # 3. 映射重建
         mkdir -p sparse
         colmap mapper \
           --database_path database.db \
           --image_path ../images \
-          --output_path sparse \
-          --Mapper.ba_global_function_tolerance=1e-6 || {
+          --output_path sparse || {
           echo "Error: COLMAP mapper failed."
           cd - > /dev/null
           exit 1
@@ -112,30 +110,28 @@ else
       if [[ -d "${OUTPUT_DIR}/images" ]] && [[ -f "${OUTPUT_DIR}/colmap/database.db" ]]; then
         echo "Running COLMAP manually (without GPU parameter)..."
         cd "${OUTPUT_DIR}/colmap"
-        # Run feature extraction without GPU
+        # 1. 特征提取（最关键的步骤）
         colmap feature_extractor \
           --database_path database.db \
           --image_path ../images \
-          --ImageReader.single_camera 1 \
-          --ImageReader.camera_model OPENCV || {
+          --ImageReader.single_camera 1 || {
           echo "Error: COLMAP feature extraction failed."
           cd - > /dev/null
           exit 1
         }
-        # Run exhaustive matcher
+        # 2. 特征匹配
         colmap exhaustive_matcher \
           --database_path database.db || {
           echo "Error: COLMAP matching failed."
           cd - > /dev/null
           exit 1
         }
-        # Run mapper
+        # 3. 映射重建
         mkdir -p sparse
         colmap mapper \
           --database_path database.db \
           --image_path ../images \
-          --output_path sparse \
-          --Mapper.ba_global_function_tolerance=1e-6 || {
+          --output_path sparse || {
           echo "Error: COLMAP mapper failed."
           cd - > /dev/null
           exit 1
