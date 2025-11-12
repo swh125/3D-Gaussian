@@ -4,10 +4,17 @@
 
 # ========== 请在这里填写你的照片路径 ==========
 PHOTOS_PATH="/home/bygpu/Desktop/video.mp4"  # 你的照片文件夹路径（或视频文件路径）
-OUTPUT_DIR="/home/bygpu/data/book_scene"     # 输出目录（ns-process-data 的输出目录，必须是绝对路径！）
 INPUT_TYPE="video"                            # "images" 或 "video"
 FEATURE_LR="0.0025"                           # 对比特征学习率（优化参数，可选）
 TEST_LAST="40"                                # baseline 渲染尾部划为测试集的帧数
+
+# OUTPUT_DIR 会根据视频文件名自动生成（如果未设置环境变量）
+# 例如：如果视频是 video.mp4，输出目录会是 /home/bygpu/data/video_scene
+# 你也可以手动设置：export OUTPUT_DIR="/home/bygpu/data/your_custom_scene"
+if [[ -z "${OUTPUT_DIR:-}" ]]; then
+    VIDEO_NAME=$(basename "${PHOTOS_PATH}" .mp4)
+    OUTPUT_DIR="/home/bygpu/data/${VIDEO_NAME}_scene"
+fi
 # =============================================
 
 echo "=========================================="
