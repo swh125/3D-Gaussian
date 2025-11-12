@@ -26,7 +26,7 @@ ITERATIONS_BASELINE="${ITERATIONS_BASELINE:-30000}"           # Baseline 训练�
 ITERATIONS_AFFINITY="${ITERATIONS_AFFINITY:-10000}"            # 对比特征训练迭代次数
 NUM_SAMPLED_RAYS="${NUM_SAMPLED_RAYS:-1000}"                  # 对比特征训练采样光线数
 FEATURE_LR="${FEATURE_LR:-0.0025}"                            # 对比特征学习率（优化参数）
-EVAL_INTERVAL="${EVAL_INTERVAL:-8}"                           # ns-process-data eval 抽帧间隔
+EVAL_INTERVAL="${EVAL_INTERVAL:-8}"                           # 渲染后划分 train/test 的抽样间隔
 # -------------------------------------------------------
 
 echo "=========================================="
@@ -44,16 +44,14 @@ if [[ "${INPUT_TYPE}" == "video" ]]; then
     --num-downscales "${NUM_DOWNSCALES}" \
     --sfm-tool hloc \
     --feature-type superpoint \
-    --matcher-type superglue \
-    --eval-interval "${EVAL_INTERVAL}" || {
+    --matcher-type superglue || {
     echo "Warning: hloc processing failed, trying fallback with colmap..."
     # Fallback: use colmap instead of hloc
     ns-process-data video \
       --data "${DATA_RAW}" \
       --output-dir "${OUTPUT_DIR}" \
       --num-downscales "${NUM_DOWNSCALES}" \
-      --sfm-tool colmap \
-      --eval-interval "${EVAL_INTERVAL}" || {
+      --sfm-tool colmap || {
       echo "Warning: nerfstudio colmap failed, trying manual COLMAP processing..."
       # If images were extracted, try manual COLMAP
       if [[ -d "${OUTPUT_DIR}/images" ]]; then
@@ -111,16 +109,14 @@ else
     --num-downscales "${NUM_DOWNSCALES}" \
     --sfm-tool hloc \
     --feature-type superpoint \
-    --matcher-type superglue \
-    --eval-interval "${EVAL_INTERVAL}" || {
+    --matcher-type superglue || {
     echo "Warning: hloc processing failed, trying fallback with colmap..."
     # Fallback: use colmap instead of hloc
     ns-process-data images \
       --data "${DATA_RAW}" \
       --output-dir "${OUTPUT_DIR}" \
       --num-downscales "${NUM_DOWNSCALES}" \
-      --sfm-tool colmap \
-      --eval-interval "${EVAL_INTERVAL}" || {
+      --sfm-tool colmap || {
       echo "Warning: nerfstudio colmap failed, trying manual COLMAP processing..."
       # If images exist, try manual COLMAP
       if [[ -d "${OUTPUT_DIR}/images" ]]; then
@@ -227,11 +223,14 @@ python get_scale.py \
 echo "✓ SAM masks and scales extracted"
 echo ""
 
-# Step 3B: Render baseline train/test views for metrics
+# Step 3B: Render baseline views and split into train/test for metrics
 echo "[Step 3B] Rendering baseline views for metrics..."
 echo "----------------------------------------"
-python render.py -m "${MODEL_PATH}" -s "${OUTPUT_DIR}" --target scene --skip_test --eval
-python render.py -m "${MODEL_PATH}" -s "${OUTPUT_DIR}" --target scene --skip_train --eval
+python render.py -m "${MODEL_PATH}" -s "${OUTPUT_DIR}" --target scene --skip_test
+python scripts/split_baseline_train_test.py \
+  --model_path "${MODEL_PATH}" \
+  --iteration "${ITERATIONS_BASELINE}" \
+  --interval "${EVAL_INTERVAL}"
 
 # Step 4: Train contrastive features
 echo "[Step 4/5] Training contrastive features for segmentation..."
