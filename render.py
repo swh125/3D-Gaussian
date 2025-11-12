@@ -82,7 +82,14 @@ def render_sets(dataset : ModelParams, iteration : int, pipeline : PipelineParam
                 precomputed_mask[precomputed_mask != 1] = 0
                 precomputed_mask = precomputed_mask.bool()
             if isinstance(precomputed_mask, torch.Tensor):
-                precomputed_mask = precomputed_mask.to(dtype=torch.float32, device="cuda")
+                if segment and (target == 'scene' or target == 'coarse_seg_everything'):
+                    if precomputed_mask.dtype != torch.bool:
+                        precomputed_mask = precomputed_mask > 0.5
+                    precomputed_mask = precomputed_mask.to(device="cuda", dtype=torch.bool)
+                else:
+                    if precomputed_mask.dtype != torch.float32:
+                        precomputed_mask = precomputed_mask.float()
+                    precomputed_mask = precomputed_mask.to(device="cuda")
 
         if target == 'scene' or target == 'seg' or target == 'coarse_seg_everything' or target == 'xyz':
             gaussians = GaussianModel(dataset.sh_degree)
