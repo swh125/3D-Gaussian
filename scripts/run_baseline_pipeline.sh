@@ -180,19 +180,19 @@ echo ""
 # Step 2: Train baseline 3DGS
 echo "[Step 2/4] Training baseline 3D Gaussian Splatting..."
 echo "----------------------------------------"
-python train_scene.py -s "${OUTPUT_DIR}" --iterations "${ITERATIONS_BASELINE}"
+# Pre-define model output path to keep track of cfg_args
+SCENE_NAME=$(basename "${OUTPUT_DIR}")
+SCENE_NAME=${SCENE_NAME// /_}
+TIMESTAMP=$(date +"%Y%m%d_%H%M%S")
+MODEL_PATH="./output/${SCENE_NAME}_${TIMESTAMP}"
+export MODEL_PATH
+echo "Model output will be stored at: ${MODEL_PATH}"
 
-# Extract model path from output (usually in ./output/ directory)
-MODEL_PATH=$(find ./output -type d -name "*" -newer "${OUTPUT_DIR}" 2>/dev/null | head -1)
-if [[ -z "${MODEL_PATH}" ]]; then
-  # Try to find the most recent output directory
-  MODEL_PATH=$(ls -td ./output/*/ 2>/dev/null | head -1)
-  MODEL_PATH=${MODEL_PATH%/}
-fi
+python train_scene.py -s "${OUTPUT_DIR}" --iterations "${ITERATIONS_BASELINE}" --model_path "${MODEL_PATH}"
 
-if [[ -z "${MODEL_PATH}" ]] || [[ ! -d "${MODEL_PATH}" ]]; then
-  echo "ERROR: Could not find trained model path. Please check train_scene.py output."
-  echo "Please manually set MODEL_PATH and run the remaining steps."
+if [[ ! -d "${MODEL_PATH}" ]]; then
+  echo "ERROR: Expected model path not found at ${MODEL_PATH}"
+  echo "Please check train_scene.py output."
   exit 1
 fi
 
