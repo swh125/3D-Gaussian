@@ -53,9 +53,20 @@ if [[ "${INPUT_TYPE}" == "video" ]]; then
       --sfm-tool colmap || {
       echo "Warning: nerfstudio colmap failed, trying manual COLMAP processing..."
       # If images were extracted, try manual COLMAP
-      if [[ -d "${OUTPUT_DIR}/images" ]] && [[ -f "${OUTPUT_DIR}/colmap/database.db" ]]; then
-        echo "Running COLMAP manually (without GPU parameter)..."
+      if [[ -d "${OUTPUT_DIR}/images" ]]; then
+        echo "Images found, running COLMAP manually (without GPU parameter)..."
+        # Ensure colmap directory exists
+        mkdir -p "${OUTPUT_DIR}/colmap"
         cd "${OUTPUT_DIR}/colmap"
+        # Create database if it doesn't exist
+        if [[ ! -f database.db ]]; then
+          echo "Creating COLMAP database..."
+          colmap database_creator --database_path database.db || {
+            echo "Error: Failed to create COLMAP database."
+            cd - > /dev/null
+            exit 1
+          }
+        fi
         # 1. 特征提取（最关键的步骤）
         colmap feature_extractor \
           --database_path database.db \
@@ -107,9 +118,20 @@ else
       --sfm-tool colmap || {
       echo "Warning: nerfstudio colmap failed, trying manual COLMAP processing..."
       # If images exist, try manual COLMAP
-      if [[ -d "${OUTPUT_DIR}/images" ]] && [[ -f "${OUTPUT_DIR}/colmap/database.db" ]]; then
-        echo "Running COLMAP manually (without GPU parameter)..."
+      if [[ -d "${OUTPUT_DIR}/images" ]]; then
+        echo "Images found, running COLMAP manually (without GPU parameter)..."
+        # Ensure colmap directory exists
+        mkdir -p "${OUTPUT_DIR}/colmap"
         cd "${OUTPUT_DIR}/colmap"
+        # Create database if it doesn't exist
+        if [[ ! -f database.db ]]; then
+          echo "Creating COLMAP database..."
+          colmap database_creator --database_path database.db || {
+            echo "Error: Failed to create COLMAP database."
+            cd - > /dev/null
+            exit 1
+          }
+        fi
         # 1. 特征提取（最关键的步骤）
         colmap feature_extractor \
           --database_path database.db \
