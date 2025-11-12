@@ -226,11 +226,56 @@ echo ""
 # Step 3B: Render baseline views and split tail frames into test set
 echo "[Step 3B] Rendering baseline views for metrics..."
 echo "----------------------------------------"
+
+# Check data count before rendering
+echo "Checking data count..."
+DATA_COUNT=$(python3 -c "
+import sys
+sys.path.insert(0, '.')
+from scene.dataset_readers import sceneLoadTypeCallbacks
+from arguments import ModelParams
+import argparse
+
+parser = argparse.ArgumentParser()
+model = ModelParams(parser, sentinel=True)
+args = parser.parse_args(['-s', '${OUTPUT_DIR}'])
+
+try:
+    if __import__('os').path.exists(__import__('os').path.join('${OUTPUT_DIR}', 'sparse')):
+        scene_info = sceneLoadTypeCallbacks['Colmap']('${OUTPUT_DIR}', args.images, args.eval, need_features=False, need_masks=False, sample_rate=1.0, allow_principle_point_shift=args.allow_principle_point_shift, replica='replica' in '${MODEL_PATH}')
+        total = len(scene_info.train_cameras) + len(scene_info.test_cameras)
+        print(f'{total}')
+    else:
+        print('0')
+except Exception as e:
+    print('0')
+" 2>/dev/null || echo "0")
+
+if [[ "${DATA_COUNT}" -lt 10 ]]; then
+    echo "⚠️  警告: 数据量过少 (${DATA_COUNT} 张图片)"
+    echo "   建议至少 50+ 张图片才能获得好的效果"
+    echo "   继续运行，但结果可能不理想..."
+    echo ""
+fi
+
 python render.py -m "${MODEL_PATH}" -s "${OUTPUT_DIR}" --target scene --skip_test
-python scripts/split_train_test_tail.py \
-  --model_path "${MODEL_PATH}" \
-  --iteration "${ITERATIONS_BASELINE}" \
-  --test_last "${TEST_LAST}"
+
+# Check rendered count before splitting
+RENDERED_COUNT=$(ls -1 "${MODEL_PATH}/train/ours_${ITERATIONS_BASELINE}/renders"/*.png 2>/dev/null | wc -l)
+if [[ ${RENDERED_COUNT} -lt 10 ]]; then
+    echo "⚠️  警告: 渲染的图片数量过少 (${RENDERED_COUNT} 张)"
+    echo "   将跳过测试集划分（数据太少）"
+    TEST_LAST=0
+fi
+
+if [[ ${TEST_LAST} -gt 0 ]] && [[ ${RENDERED_COUNT} -gt 4 ]]; then
+    python scripts/split_train_test_tail.py \
+      --model_path "${MODEL_PATH}" \
+      --iteration "${ITERATIONS_BASELINE}" \
+      --test_last "${TEST_LAST}"
+else
+    echo "跳过测试集划分（数据量不足或 TEST_LAST=0）"
+fi
 
 # Step 4: Train contrastive features
 echo "[Step 4/5] Training contrastive features for segmentation..."
