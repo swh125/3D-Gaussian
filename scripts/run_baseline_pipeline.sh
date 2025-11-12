@@ -26,6 +26,7 @@ ITERATIONS_BASELINE="${ITERATIONS_BASELINE:-30000}"           # Baseline 训练�
 ITERATIONS_AFFINITY="${ITERATIONS_AFFINITY:-10000}"            # 对比特征训练迭代次数
 NUM_SAMPLED_RAYS="${NUM_SAMPLED_RAYS:-1000}"                  # 对比特征训练采样光线数
 FEATURE_LR="${FEATURE_LR:-0.0025}"                            # 对比特征学习率（优化参数）
+EVAL_INTERVAL="${EVAL_INTERVAL:-8}"                           # ns-process-data eval 抽帧间隔
 # -------------------------------------------------------
 
 echo "=========================================="
@@ -44,14 +45,15 @@ if [[ "${INPUT_TYPE}" == "video" ]]; then
     --sfm-tool hloc \
     --feature-type superpoint \
     --matcher-type superglue \
-    --eval-interval 8 || {
+    --eval-interval "${EVAL_INTERVAL}" || {
     echo "Warning: hloc processing failed, trying fallback with colmap..."
     # Fallback: use colmap instead of hloc
     ns-process-data video \
       --data "${DATA_RAW}" \
       --output-dir "${OUTPUT_DIR}" \
       --num-downscales "${NUM_DOWNSCALES}" \
-      --sfm-tool colmap || {
+      --sfm-tool colmap \
+      --eval-interval "${EVAL_INTERVAL}" || {
       echo "Warning: nerfstudio colmap failed, trying manual COLMAP processing..."
       # If images were extracted, try manual COLMAP
       if [[ -d "${OUTPUT_DIR}/images" ]]; then
@@ -110,14 +112,15 @@ else
     --sfm-tool hloc \
     --feature-type superpoint \
     --matcher-type superglue \
-    --eval-interval 8 || {
+    --eval-interval "${EVAL_INTERVAL}" || {
     echo "Warning: hloc processing failed, trying fallback with colmap..."
     # Fallback: use colmap instead of hloc
     ns-process-data images \
       --data "${DATA_RAW}" \
       --output-dir "${OUTPUT_DIR}" \
       --num-downscales "${NUM_DOWNSCALES}" \
-      --sfm-tool colmap || {
+      --sfm-tool colmap \
+      --eval-interval "${EVAL_INTERVAL}" || {
       echo "Warning: nerfstudio colmap failed, trying manual COLMAP processing..."
       # If images exist, try manual COLMAP
       if [[ -d "${OUTPUT_DIR}/images" ]]; then

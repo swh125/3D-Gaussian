@@ -4,9 +4,10 @@
 
 # ========== 请在这里填写你的照片路径 ==========
 PHOTOS_PATH="/home/bygpu/Desktop/video.mp4"  # 你的照片文件夹路径（或视频文件路径）
-OUTPUT_DIR="./output_scene"            # 输出目录（会自动创建）
-INPUT_TYPE="video"                     # "images" 或 "video"
-FEATURE_LR="0.0025"                     # 对比特征学习率（优化参数，可选）
+OUTPUT_DIR="./output_scene_eval24"           # 输出目录（会自动创建）
+INPUT_TYPE="video"                           # "images" 或 "video"
+FEATURE_LR="0.0025"                          # 对比特征学习率（优化参数，可选）
+EVAL_INTERVAL="24"                           # train/test 抽帧间隔（越大差异越大）
 # =============================================
 
 echo "=========================================="
@@ -31,6 +32,7 @@ export DATA_RAW="${PHOTOS_PATH}"
 export OUTPUT_DIR="${OUTPUT_DIR}"
 export INPUT_TYPE="${INPUT_TYPE}"
 export FEATURE_LR="${FEATURE_LR}"
+export EVAL_INTERVAL="${EVAL_INTERVAL}"
 
 echo "正在运行一键脚本..."
 echo ""
