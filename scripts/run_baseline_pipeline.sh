@@ -26,6 +26,7 @@ ITERATIONS_BASELINE="${ITERATIONS_BASELINE:-30000}"           # Baseline 训练�
 ITERATIONS_AFFINITY="${ITERATIONS_AFFINITY:-10000}"            # 对比特征训练迭代次数
 NUM_SAMPLED_RAYS="${NUM_SAMPLED_RAYS:-1000}"                  # 对比特征训练采样光线数
 FEATURE_LR="${FEATURE_LR:-0.0025}"                            # 对比特征学习率（优化参数）
+TEST_LAST="${TEST_LAST:-40}"                                  # baseline 渲染中划为测试集的尾部帧数
 # -------------------------------------------------------
 
 echo "=========================================="
@@ -222,11 +223,14 @@ python get_scale.py \
 echo "✓ SAM masks and scales extracted"
 echo ""
 
-# Step 3B: Render baseline train/test views for metrics
+# Step 3B: Render baseline views and split tail frames into test set
 echo "[Step 3B] Rendering baseline views for metrics..."
 echo "----------------------------------------"
-python render.py -m "${MODEL_PATH}" -s "${OUTPUT_DIR}" --target scene --skip_test --eval
-python render.py -m "${MODEL_PATH}" -s "${OUTPUT_DIR}" --target scene --skip_train --eval
+python render.py -m "${MODEL_PATH}" -s "${OUTPUT_DIR}" --target scene --skip_test
+python scripts/split_train_test_tail.py \
+  --model_path "${MODEL_PATH}" \
+  --iteration "${ITERATIONS_BASELINE}" \
+  --test_last "${TEST_LAST}"
 
 # Step 4: Train contrastive features
 echo "[Step 4/5] Training contrastive features for segmentation..."
