@@ -16,8 +16,14 @@ You can also override --render_dir / --gt_dir directly.
 """
 
 import argparse
+import sys
 from pathlib import Path
 from typing import List, Tuple
+
+# Ensure project root is on PYTHONPATH
+ROOT_DIR = Path(__file__).resolve().parents[1]
+if str(ROOT_DIR) not in sys.path:
+    sys.path.append(str(ROOT_DIR))
 
 import torch
 from PIL import Image
