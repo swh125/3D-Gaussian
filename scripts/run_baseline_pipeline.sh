@@ -44,21 +44,16 @@ if [[ "${INPUT_TYPE}" == "video" ]]; then
     --sfm-tool hloc \
     --feature-type superpoint \
     --matcher-type superglue || {
-    echo "Warning: hloc processing failed, trying fallback..."
-    # Fallback: try manual COLMAP mapper
-    if [[ -d "${OUTPUT_DIR}/colmap" ]] && [[ ! -d "${OUTPUT_DIR}/colmap/sparse/0" ]]; then
-      echo "Running COLMAP mapper manually..."
-      cd "${OUTPUT_DIR}/colmap"
-      colmap mapper \
-        --database_path database.db \
-        --image_path ../images \
-        --output_path sparse \
-        --Mapper.ba_global_function_tolerance=1e-6 || {
-        echo "Error: COLMAP mapper failed. Please check your data."
-        exit 1
-      }
-      cd - > /dev/null
-    fi
+    echo "Warning: hloc processing failed, trying fallback with colmap..."
+    # Fallback: use colmap instead of hloc
+    ns-process-data video \
+      --data "${DATA_RAW}" \
+      --output-dir "${OUTPUT_DIR}" \
+      --num-downscales "${NUM_DOWNSCALES}" \
+      --sfm-tool colmap || {
+      echo "Error: COLMAP processing also failed. Please check your data and installation."
+      exit 1
+    }
   }
 else
   ns-process-data images \
@@ -67,7 +62,18 @@ else
     --num-downscales "${NUM_DOWNSCALES}" \
     --sfm-tool hloc \
     --feature-type superpoint \
-    --matcher-type superglue
+    --matcher-type superglue || {
+    echo "Warning: hloc processing failed, trying fallback with colmap..."
+    # Fallback: use colmap instead of hloc
+    ns-process-data images \
+      --data "${DATA_RAW}" \
+      --output-dir "${OUTPUT_DIR}" \
+      --num-downscales "${NUM_DOWNSCALES}" \
+      --sfm-tool colmap || {
+      echo "Error: COLMAP processing also failed. Please check your data and installation."
+      exit 1
+    }
+  }
 fi
 
 # Create sparse symlink if needed
