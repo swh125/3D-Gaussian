@@ -25,6 +25,7 @@ DOWNSAMPLE="${DOWNSAMPLE:-2}"                                 # SAM mask downsam
 ITERATIONS_BASELINE="${ITERATIONS_BASELINE:-30000}"           # Baseline 训练迭代次数
 ITERATIONS_AFFINITY="${ITERATIONS_AFFINITY:-10000}"            # 对比特征训练迭代次数
 NUM_SAMPLED_RAYS="${NUM_SAMPLED_RAYS:-1000}"                  # 对比特征训练采样光线数
+FEATURE_LR="${FEATURE_LR:-0.0025}"                            # 对比特征学习率（优化参数）
 # -------------------------------------------------------
 
 echo "=========================================="
@@ -129,6 +130,7 @@ echo "----------------------------------------"
 python train_contrastive_feature.py \
   -m "${MODEL_PATH}" \
   --iterations "${ITERATIONS_AFFINITY}" \
+  --feature_lr "${FEATURE_LR}" \
   --num_sampled_rays "${NUM_SAMPLED_RAYS}"
 
 echo "✓ Contrastive features trained"
@@ -149,4 +151,5 @@ echo ""
 echo "  2. Or render results:"
 echo "     python render.py -m ${MODEL_PATH} -s ${OUTPUT_DIR} --target scene"
 echo ""
+
 
