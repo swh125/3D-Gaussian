@@ -3,9 +3,9 @@
 # 使用方法：修改下面的路径，然后运行: bash run_with_new_images.sh
 
 # ========== 请在这里填写你的照片路径 ==========
-PHOTOS_PATH="C:/path/to/your/photos"  # 你的照片文件夹路径（或视频文件路径）
+PHOTOS_PATH="/home/bygpu/Desktop/video.mp4"  # 你的照片文件夹路径（或视频文件路径）
 OUTPUT_DIR="./output_scene"            # 输出目录（会自动创建）
-INPUT_TYPE="images"                    # "images" 或 "video"
+INPUT_TYPE="video"                     # "images" 或 "video"
 FEATURE_LR="0.0025"                     # 对比特征学习率（优化参数，可选）
 # =============================================
 
