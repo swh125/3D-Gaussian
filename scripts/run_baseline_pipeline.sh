@@ -43,7 +43,8 @@ if [[ "${INPUT_TYPE}" == "video" ]]; then
     --num-downscales "${NUM_DOWNSCALES}" \
     --sfm-tool hloc \
     --feature-type superpoint \
-    --matcher-type superglue || {
+    --matcher-type superglue \
+    --eval-interval 8 || {
     echo "Warning: hloc processing failed, trying fallback with colmap..."
     # Fallback: use colmap instead of hloc
     ns-process-data video \
@@ -108,7 +109,8 @@ else
     --num-downscales "${NUM_DOWNSCALES}" \
     --sfm-tool hloc \
     --feature-type superpoint \
-    --matcher-type superglue || {
+    --matcher-type superglue \
+    --eval-interval 8 || {
     echo "Warning: hloc processing failed, trying fallback with colmap..."
     # Fallback: use colmap instead of hloc
     ns-process-data images \
@@ -222,8 +224,14 @@ python get_scale.py \
 echo "✓ SAM masks and scales extracted"
 echo ""
 
+# Step 3B: Render baseline train/test views for metrics
+echo "[Step 3B] Rendering baseline views for metrics..."
+echo "----------------------------------------"
+python render.py -m "${MODEL_PATH}" -s "${OUTPUT_DIR}" --target scene --skip_test --eval
+python render.py -m "${MODEL_PATH}" -s "${OUTPUT_DIR}" --target scene --skip_train --eval
+
 # Step 4: Train contrastive features
-echo "[Step 4/4] Training contrastive features for segmentation..."
+echo "[Step 4/5] Training contrastive features for segmentation..."
 echo "----------------------------------------"
 python train_contrastive_feature.py \
   -m "${MODEL_PATH}" \
