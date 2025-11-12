@@ -100,13 +100,19 @@ def compute_metrics(args: argparse.Namespace) -> None:
     if args.limit is not None:
         render_files = render_files[:args.limit]
     if len(render_files) == 0:
-        raise RuntimeError(f"No render images (*.{args.ext}) found in {render_dir}")
+        raise RuntimeError(
+            f"No render images (*.{args.ext}) found in {render_dir}. "
+            "Run render.py to export renders/gt before computing metrics."
+        )
 
     device = torch.device(args.device if torch.cuda.is_available() else "cpu")
 
     lpips_model = None
     if _HAS_LPIPS:
-        lpips_model = LPIPS(net="alex").to(device)
+        try:
+            lpips_model = LPIPS(net="alex").to(device)
+        except TypeError:
+            lpips_model = LPIPS().to(device)
         lpips_model.eval()
     else:
         print("Warning: LPIPS module not available, skipping LPIPS metric.")
