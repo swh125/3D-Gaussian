@@ -9,11 +9,24 @@ import shutil
 from pathlib import Path
 
 
+MIN_TRAIN_FRAMES = 4
+
+
 def move_tail(src_dir: Path, dst_dir: Path, count: int) -> int:
     files = sorted(src_dir.glob("*.png"))
-    if count <= 0 or not files:
+    total = len(files)
+    if count <= 0 or total == 0:
         return 0
-    tail = files[-count:]
+    if total <= MIN_TRAIN_FRAMES:
+        print(f"[split] Skip {src_dir} -> only {total} frame(s); need > {MIN_TRAIN_FRAMES} to create a test split.")
+        return 0
+
+    effective = min(count, max(0, total - MIN_TRAIN_FRAMES))
+    if effective == 0:
+        print(f"[split] Skip {src_dir} -> leaving at least {MIN_TRAIN_FRAMES} frames for training.")
+        return 0
+
+    tail = files[-effective:]
     dst_dir.mkdir(parents=True, exist_ok=True)
     moved = 0
     for file in tail:
