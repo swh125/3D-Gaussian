@@ -189,7 +189,7 @@ MODEL_PATH="./output/${SCENE_NAME}_${TIMESTAMP}"
 export MODEL_PATH
 echo "Model output will be stored at: ${MODEL_PATH}"
 
-python train_scene.py -s "${OUTPUT_DIR}" --iterations "${ITERATIONS_BASELINE}" --model_path "${MODEL_PATH}"
+python train_scene.py -s "${OUTPUT_DIR}" --iterations "${ITERATIONS_BASELINE}" --model_path "${MODEL_PATH}" --eval --test_last_n "${TEST_LAST}"
 
 if [[ ! -d "${MODEL_PATH}" ]]; then
   echo "ERROR: Expected model path not found at ${MODEL_PATH}"

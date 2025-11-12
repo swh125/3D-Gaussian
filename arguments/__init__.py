@@ -61,6 +61,7 @@ class ModelParams(ParamGroup):
         self.need_features = False
         self.need_masks = False
         self.allow_principle_point_shift = False
+        self.test_last_n = 0  # Number of last frames to use as test set (temporal split)
 
         super().__init__(parser, "Loading Parameters", sentinel)
 

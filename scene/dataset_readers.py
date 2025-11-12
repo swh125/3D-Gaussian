@@ -153,7 +153,7 @@ def storePly(path, xyz, rgb):
     ply_data = PlyData([vertex_element])
     ply_data.write(path)
 
-def readColmapSceneInfo(path, images, eval, llffhold=8, need_features=False, need_masks=False, sample_rate = 1.0, allow_principle_point_shift = False, replica=False):
+def readColmapSceneInfo(path, images, eval, llffhold=8, need_features=False, need_masks=False, sample_rate = 1.0, allow_principle_point_shift = False, replica=False, test_last_n=0):
     try:
         cameras_extrinsic_file = os.path.join(path, "sparse/0", "images.bin")
         cameras_intrinsic_file = os.path.join(path, "sparse/0", "cameras.bin")
@@ -178,8 +178,23 @@ def readColmapSceneInfo(path, images, eval, llffhold=8, need_features=False, nee
         cam_infos = sorted(cam_infos_unsorted.copy(), key = lambda x : int(x.image_name.split("_")[-1]))
 
     if eval:
-        train_cam_infos = [c for idx, c in enumerate(cam_infos) if idx % llffhold != 0]
-        test_cam_infos = [c for idx, c in enumerate(cam_infos) if idx % llffhold == 0]
+        # If test_last_n > 0, use temporal split (first N for train, last test_last_n for test)
+        # Otherwise, use interval split (every llffhold-th frame for test)
+        if test_last_n > 0:
+            total = len(cam_infos)
+            # Ensure at least 4 frames remain in training set
+            effective_test_n = min(test_last_n, max(0, total - 4))
+            if effective_test_n > 0:
+                train_cam_infos = cam_infos[:-effective_test_n]
+                test_cam_infos = cam_infos[-effective_test_n:]
+                print(f"[split] Using temporal split: {len(train_cam_infos)} train (first {len(train_cam_infos)} frames), {len(test_cam_infos)} test (last {len(test_cam_infos)} frames)")
+            else:
+                train_cam_infos = cam_infos
+                test_cam_infos = []
+                print(f"[split] Skipping temporal split: not enough frames (total={total}, need >4)")
+        else:
+            train_cam_infos = [c for idx, c in enumerate(cam_infos) if idx % llffhold != 0]
+            test_cam_infos = [c for idx, c in enumerate(cam_infos) if idx % llffhold == 0]
     else:
         train_cam_infos = cam_infos
         test_cam_infos = []
