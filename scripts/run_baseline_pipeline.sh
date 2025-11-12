@@ -51,8 +51,45 @@ if [[ "${INPUT_TYPE}" == "video" ]]; then
       --output-dir "${OUTPUT_DIR}" \
       --num-downscales "${NUM_DOWNSCALES}" \
       --sfm-tool colmap || {
-      echo "Error: COLMAP processing also failed. Please check your data and installation."
-      exit 1
+      echo "Warning: nerfstudio colmap failed, trying manual COLMAP processing..."
+      # If images were extracted, try manual COLMAP
+      if [[ -d "${OUTPUT_DIR}/images" ]] && [[ -f "${OUTPUT_DIR}/colmap/database.db" ]]; then
+        echo "Running COLMAP manually (without GPU parameter)..."
+        cd "${OUTPUT_DIR}/colmap"
+        # Run feature extraction without GPU
+        colmap feature_extractor \
+          --database_path database.db \
+          --image_path ../images \
+          --ImageReader.single_camera 1 \
+          --ImageReader.camera_model OPENCV || {
+          echo "Error: COLMAP feature extraction failed."
+          cd - > /dev/null
+          exit 1
+        }
+        # Run exhaustive matcher
+        colmap exhaustive_matcher \
+          --database_path database.db || {
+          echo "Error: COLMAP matching failed."
+          cd - > /dev/null
+          exit 1
+        }
+        # Run mapper
+        mkdir -p sparse
+        colmap mapper \
+          --database_path database.db \
+          --image_path ../images \
+          --output_path sparse \
+          --Mapper.ba_global_function_tolerance=1e-6 || {
+          echo "Error: COLMAP mapper failed."
+          cd - > /dev/null
+          exit 1
+        }
+        cd - > /dev/null
+        echo "✓ Manual COLMAP processing complete"
+      else
+        echo "Error: Images not found or database not created. Please check your data."
+        exit 1
+      fi
     }
   }
 else
@@ -70,8 +107,45 @@ else
       --output-dir "${OUTPUT_DIR}" \
       --num-downscales "${NUM_DOWNSCALES}" \
       --sfm-tool colmap || {
-      echo "Error: COLMAP processing also failed. Please check your data and installation."
-      exit 1
+      echo "Warning: nerfstudio colmap failed, trying manual COLMAP processing..."
+      # If images exist, try manual COLMAP
+      if [[ -d "${OUTPUT_DIR}/images" ]] && [[ -f "${OUTPUT_DIR}/colmap/database.db" ]]; then
+        echo "Running COLMAP manually (without GPU parameter)..."
+        cd "${OUTPUT_DIR}/colmap"
+        # Run feature extraction without GPU
+        colmap feature_extractor \
+          --database_path database.db \
+          --image_path ../images \
+          --ImageReader.single_camera 1 \
+          --ImageReader.camera_model OPENCV || {
+          echo "Error: COLMAP feature extraction failed."
+          cd - > /dev/null
+          exit 1
+        }
+        # Run exhaustive matcher
+        colmap exhaustive_matcher \
+          --database_path database.db || {
+          echo "Error: COLMAP matching failed."
+          cd - > /dev/null
+          exit 1
+        }
+        # Run mapper
+        mkdir -p sparse
+        colmap mapper \
+          --database_path database.db \
+          --image_path ../images \
+          --output_path sparse \
+          --Mapper.ba_global_function_tolerance=1e-6 || {
+          echo "Error: COLMAP mapper failed."
+          cd - > /dev/null
+          exit 1
+        }
+        cd - > /dev/null
+        echo "✓ Manual COLMAP processing complete"
+      else
+        echo "Error: Images not found or database not created. Please check your data."
+        exit 1
+      fi
     }
   }
 fi
