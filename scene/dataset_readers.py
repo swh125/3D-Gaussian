@@ -116,9 +116,32 @@ def readColmapCameras(cam_extrinsics, cam_intrinsics, images_folder, features_fo
         image_name = os.path.basename(image_path).split(".")[0]
         image = Image.open(image_path)
 
-        features = torch.load(os.path.join(features_folder, image_name.split('.')[0] + ".pt")) if features_folder is not None else None
-        masks = torch.load(os.path.join(masks_folder, image_name.split('.')[0] + ".pt")) if masks_folder is not None else None
-        mask_scales = torch.load(os.path.join(mask_scale_folder, image_name.split('.')[0] + ".pt")) if mask_scale_folder is not None else None
+        # Robust loading: if optional files are missing, fall back gracefully
+        if features_folder is not None:
+            try:
+                features = torch.load(os.path.join(features_folder, image_name.split('.')[0] + ".pt"))
+            except Exception:
+                features = None
+        else:
+            features = None
+
+        if masks_folder is not None:
+            try:
+                masks = torch.load(os.path.join(masks_folder, image_name.split('.')[0] + ".pt"))
+            except Exception:
+                masks = None
+        else:
+            masks = None
+
+        if mask_scale_folder is not None:
+            ms_path = os.path.join(mask_scale_folder, image_name.split('.')[0] + ".pt")
+            try:
+                mask_scales = torch.load(ms_path)
+            except Exception:
+                # Default to scale 1.0 if mask scale file is missing
+                mask_scales = torch.tensor(1.0)
+        else:
+            mask_scales = None
 
         cam_info = CameraInfo(uid=uid, R=R, T=T, FovY=FovY, FovX=FovX, image=image, features=features, masks=masks, mask_scales = mask_scales,
                               image_path=image_path, image_name=image_name, width=width, height=height, cx=intr.params[2] if len(intr.params) > 3 and allow_principle_point_shift else None, cy=intr.params[3] if len(intr.params) >3 and allow_principle_point_shift else None)
