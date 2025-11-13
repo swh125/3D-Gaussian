@@ -583,11 +583,14 @@ class GaussianModel:
         if update_filter is None or update_filter.numel() == 0:
             return
 
-        if torch.count_nonzero(update_filter) == 0:
+        if int(torch.count_nonzero(update_filter).item()) == 0:
             return
 
         grad = viewspace_point_tensor.grad
         if grad is None:
+            return
+
+        if grad.numel() == 0 or grad.shape[0] == 0:
             return
 
         if grad.shape[0] != update_filter.shape[0]:
