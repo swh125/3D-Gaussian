@@ -595,7 +595,12 @@ class GaussianModel:
         if max_valid == 0:
             return
 
-        valid_idx = idx[idx < max_valid]
+        max_points = self.xyz_gradient_accum.shape[0]
+        if max_points == 0:
+            return
+
+        limit = min(max_valid, max_points)
+        valid_idx = idx[idx < limit]
         if valid_idx.numel() == 0:
             return
 
