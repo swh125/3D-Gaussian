@@ -6,7 +6,7 @@
 PHOTOS_PATH="/home/bygpu/Desktop/video.mp4"  # 你的照片文件夹路径（或视频文件路径）
 INPUT_TYPE="video"                            # "images" 或 "video"
 FEATURE_LR="0.0025"                           # 对比特征学习率（优化参数，可选）
-TEST_LAST="40"                                # baseline 渲染尾部划为测试集的帧数
+TEST_LAST="0"                                # baseline 渲染尾部划为测试集的帧数 (0 = 不划分测试集)
 
 # OUTPUT_DIR 会根据视频文件名自动生成（如果未设置环境变量）
 # 例如：如果视频是 video.mp4，输出目录会是 /home/bygpu/data/video_scene

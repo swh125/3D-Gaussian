@@ -26,7 +26,7 @@ ITERATIONS_BASELINE="${ITERATIONS_BASELINE:-30000}"           # Baseline 训练�
 ITERATIONS_AFFINITY="${ITERATIONS_AFFINITY:-10000}"            # 对比特征训练迭代次数
 NUM_SAMPLED_RAYS="${NUM_SAMPLED_RAYS:-1000}"                  # 对比特征训练采样光线数
 FEATURE_LR="${FEATURE_LR:-0.0025}"                            # 对比特征学习率（优化参数）
-TEST_LAST="${TEST_LAST:-40}"                                  # baseline 渲染中划为测试集的尾部帧数
+TEST_LAST="${TEST_LAST:-0}"                                  # baseline 渲染中划为测试集的尾部帧数
 # -------------------------------------------------------
 
 echo "=========================================="
@@ -189,7 +189,12 @@ MODEL_PATH="./output/${SCENE_NAME}_${TIMESTAMP}"
 export MODEL_PATH
 echo "Model output will be stored at: ${MODEL_PATH}"
 
-python train_scene.py -s "${OUTPUT_DIR}" --iterations "${ITERATIONS_BASELINE}" --model_path "${MODEL_PATH}" --eval --test_last_n "${TEST_LAST}"
+TRAIN_ARGS=("python" "train_scene.py" "-s" "${OUTPUT_DIR}" "--iterations" "${ITERATIONS_BASELINE}" "--model_path" "${MODEL_PATH}")
+if [[ "${TEST_LAST}" -gt 0 ]]; then
+  TRAIN_ARGS+=("--eval" "--test_last_n" "${TEST_LAST}")
+fi
+
+"${TRAIN_ARGS[@]}"
 
 if [[ ! -d "${MODEL_PATH}" ]]; then
   echo "ERROR: Expected model path not found at ${MODEL_PATH}"
