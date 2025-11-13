@@ -583,35 +583,23 @@ class GaussianModel:
         if update_filter is None or update_filter.numel() == 0:
             return
 
-        nonzero = int(torch.count_nonzero(update_filter).item())
-        if nonzero == 0:
-            return
-
         grad = viewspace_point_tensor.grad
-        if grad is None:
+        if grad is None or grad.numel() == 0:
             return
 
-        if grad.numel() == 0:
+        idx = torch.nonzero(update_filter, as_tuple=False).flatten()
+        if idx.numel() == 0:
             return
 
-        grad_len = grad.shape[0]
-        mask_len = update_filter.shape[0]
-
-        if grad_len == 0 or mask_len == 0:
+        max_valid = grad.shape[0]
+        if max_valid == 0:
             return
 
-        if grad_len < mask_len:
-            trimmed_filter = update_filter.clone()
-            trimmed_filter[grad_len:] = False
-            effective_filter = trimmed_filter
-        elif grad_len > mask_len:
-            grad = grad[:mask_len]
-            effective_filter = update_filter
-        else:
-            effective_filter = update_filter
-
-        if int(torch.count_nonzero(effective_filter).item()) == 0:
+        valid_idx = idx[idx < max_valid]
+        if valid_idx.numel() == 0:
             return
 
-        self.xyz_gradient_accum[effective_filter] += torch.norm(grad[effective_filter, :2], dim=-1, keepdim=True)
-        self.denom[effective_filter] += 1
+        grad_slice = grad[valid_idx, :2]
+        contrib = torch.norm(grad_slice, dim=-1, keepdim=True)
+        self.xyz_gradient_accum[valid_idx] += contrib
+        self.denom[valid_idx] += 1
