@@ -1,13 +1,19 @@
 #
-# Optimized training script for 3D Gaussian Splatting
-# Adds additional loss terms and hyperparameter tuning
+# Copyright (C) 2023, Inria
+# GRAPHDECO research group, https://team.inria.fr/graphdeco
+# All rights reserved.
+#
+# This software is free for non-commercial, research and evaluation use 
+# under the terms of the LICENSE.md file.
+#
+# For inquiries contact  george.drettakis@inria.fr
 #
 
 import os
 import torch
 from random import randint
 import numpy as np
-from utils.loss_utils import l1_loss, ssim, l2_loss
+from utils.loss_utils import l1_loss, ssim
 from gaussian_renderer import render, network_gui
 import sys
 from scene import Scene, GaussianModel
@@ -25,6 +31,7 @@ except ImportError:
 
 import torch.nn.functional as F
 
+# import time
 
 def edge_loss(image, gt_image):
     """Compute edge-aware loss using Sobel filters"""
@@ -49,23 +56,15 @@ def edge_loss(image, gt_image):
     edge_gt = sobel_filter(gt_image)
     return l1_loss(edge_pred, edge_gt)
 
-
-def training(dataset, opt, pipe, testing_iterations, saving_iterations, checkpoint_iterations, checkpoint, debug_from, load_iteration=None):
-    if checkpoint and load_iteration:
-        print("Warning: --start_checkpoint overrides --load_iteration")
-        load_iteration = None
-
+def training(dataset, opt, pipe, testing_iterations, saving_iterations, checkpoint_iterations, checkpoint, debug_from):
     first_iter = 0
     tb_writer = prepare_output_and_logger(dataset)
     gaussians = GaussianModel(dataset.sh_degree)
+    scene = Scene(dataset, gaussians)
     gaussians.training_setup(opt)
     if checkpoint:
         (model_params, first_iter) = torch.load(checkpoint)
         gaussians.restore(model_params, opt)
-    elif load_iteration and load_iteration > 0:
-        first_iter = load_iteration
-
-    scene = Scene(dataset, gaussians, load_iteration=load_iteration)
 
     bg_color = [1, 1, 1] if dataset.white_background else [0, 0, 0]
     background = torch.tensor(bg_color, dtype=torch.float32, device="cuda")
@@ -75,8 +74,7 @@ def training(dataset, opt, pipe, testing_iterations, saving_iterations, checkpoi
 
     viewpoint_stack = None
     ema_loss_for_log = 0.0
-    resume_from_iter = first_iter
-    progress_bar = tqdm(range(resume_from_iter, opt.iterations), desc="Training progress")
+    progress_bar = tqdm(range(first_iter, opt.iterations), desc="Training progress")
     first_iter += 1
     for iteration in range(first_iter, opt.iterations + 1):        
         if network_gui.conn == None:
@@ -96,8 +94,7 @@ def training(dataset, opt, pipe, testing_iterations, saving_iterations, checkpoi
 
         iter_start.record()
 
-        relative_iter = iteration if resume_from_iter == 0 else iteration - resume_from_iter
-        gaussians.update_learning_rate(relative_iter)
+        gaussians.update_learning_rate(iteration)
 
         # Every 1000 its we increase the levels of SH up to a maximum degree
         if iteration % 1000 == 0:
@@ -112,23 +109,27 @@ def training(dataset, opt, pipe, testing_iterations, saving_iterations, checkpoi
         if (iteration - 1) == debug_from:
             pipe.debug = True
 
+        # start_time = time.time()
         render_pkg = render(viewpoint_cam, gaussians, pipe, background)
         image, viewspace_point_tensor, visibility_filter, radii = render_pkg["render"], render_pkg["viewspace_points"], render_pkg["visibility_filter"], render_pkg["radii"]
+        # print("render time", time.time() - start_time)
 
-        # Loss computation
+        # Loss
         gt_image = viewpoint_cam.original_image.cuda()
+        # gt_mask = gt_image.sum(dim = 0)[None,:,:]
+        # gt_mask[gt_mask != 0] = 1
 
-        # Base losses (same as baseline)
+        # mask_loss = - ((gt_mask * mask).sum() + 0.15 * ((1-gt_mask) * mask).sum())
+
         Ll1 = l1_loss(image, gt_image)
         Lssim = (1.0 - ssim(image, gt_image))
         
-        # Add edge loss (only optimization)
+        # Add edge loss (only change from baseline)
         lambda_edge = getattr(opt, 'lambda_edge', 0.1)
         if lambda_edge > 0:
             Ledge = edge_loss(image, gt_image)
             loss = (1.0 - opt.lambda_dssim) * Ll1 + opt.lambda_dssim * Lssim + lambda_edge * Ledge
         else:
-            # Fallback to baseline loss if edge loss disabled
             loss = (1.0 - opt.lambda_dssim) * Ll1 + opt.lambda_dssim * Lssim
         
         loss.backward()
@@ -145,11 +146,12 @@ def training(dataset, opt, pipe, testing_iterations, saving_iterations, checkpoi
                 progress_bar.close()
 
             # Log and save
+            # training_report(tb_writer, iteration, Ll1, loss, l1_loss, iter_start.elapsed_time(iter_end), testing_iterations, scene, render, (pipe, background))
             if (iteration in saving_iterations):
                 print("\n[ITER {}] Saving Gaussians".format(iteration))
                 scene.save(iteration)
 
-            # Densification (exactly same as baseline - no changes)
+            # Densification
             if iteration < opt.densify_until_iter:
                 # Keep track of max radii in image-space for pruning
                 gaussians.max_radii2D[visibility_filter] = torch.max(gaussians.max_radii2D[visibility_filter], radii[visibility_filter])
@@ -211,7 +213,7 @@ def training_report(tb_writer, iteration, Ll1, loss, l1_loss, elapsed, testing_i
                 psnr_test = 0.0
                 for idx, viewpoint in enumerate(config['cameras']):
                     image = torch.clamp(renderFunc(viewpoint, scene.gaussians, *renderArgs)["render"], 0.0, 1.0)
-                    gt_image = torch.clamp(viewpoint.original_image.to(image.device), 0.0, 1.0)
+                    gt_image = torch.clamp(viewpoint.original_image.to("cuda"), 0.0, 1.0)
                     if tb_writer and (idx < 5):
                         tb_writer.add_images(config['name'] + "_view_{}/render".format(viewpoint.image_name), image[None], global_step=iteration)
                         if iteration == testing_iterations[0]:
@@ -245,13 +247,13 @@ if __name__ == "__main__":
     parser.add_argument("--quiet", action="store_true")
     parser.add_argument("--checkpoint_iterations", nargs="+", type=int, default=[])
     parser.add_argument("--start_checkpoint", type=str, default = None)
-    parser.add_argument("--load_iteration", type=int, default=None, help="Resume training from an existing point_cloud iteration in model_path")
     parser.add_argument("--lambda_edge", type=float, default=0.1, help="Weight for edge loss")
     args = parser.parse_args(sys.argv[1:])
     args.save_iterations.append(args.iterations)
     
     print("Optimizing " + args.model_path)
-    print(f"Using edge loss with weight: {args.lambda_edge}")
+    if args.lambda_edge > 0:
+        print(f"Using edge loss with weight: {args.lambda_edge}")
 
     # Initialize system state (RNG)
     safe_state(args.quiet)
@@ -259,9 +261,7 @@ if __name__ == "__main__":
     # Start GUI server, configure and run training
     network_gui.init(args.ip, args.port)
     torch.autograd.set_detect_anomaly(args.detect_anomaly)
-    training(lp.extract(args), op.extract(args), pp.extract(args), args.test_iterations, args.save_iterations, args.checkpoint_iterations, args.start_checkpoint, args.debug_from, args.load_iteration)
+    training(lp.extract(args), op.extract(args), pp.extract(args), args.test_iterations, args.save_iterations, args.checkpoint_iterations, args.start_checkpoint, args.debug_from)
 
     # All done
     print("\nTraining complete.")
-
-
