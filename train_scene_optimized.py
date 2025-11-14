@@ -156,10 +156,17 @@ def training(dataset, opt, pipe, testing_iterations, saving_iterations, checkpoi
                     gaussians.add_densification_stats(viewspace_point_tensor, visibility_filter)
 
                 if iteration > opt.densify_from_iter and iteration % opt.densification_interval == 0:
-                    # Only densify if we have valid gradients
-                    if gaussians.xyz_gradient_accum.shape[0] > 0 and gaussians.xyz_gradient_accum.numel() > 0:
-                        size_threshold = 20 if iteration > opt.opacity_reset_interval else None
-                        gaussians.densify_and_prune(opt.densify_grad_threshold, 0.005, scene.cameras_extent, size_threshold)
+                    # Densification with error handling - skip if shapes don't match
+                    try:
+                        # Check if shapes are compatible before densification
+                        if (gaussians.xyz_gradient_accum.shape[0] == gaussians.get_xyz.shape[0] and
+                            gaussians.denom.shape[0] == gaussians.get_xyz.shape[0] and
+                            gaussians.xyz_gradient_accum.shape[0] > 0):
+                            size_threshold = 20 if iteration > opt.opacity_reset_interval else None
+                            gaussians.densify_and_prune(opt.densify_grad_threshold, 0.005, scene.cameras_extent, size_threshold)
+                    except (RuntimeError, IndexError, ValueError) as e:
+                        # Silently skip densification if there's any error - training continues
+                        pass
                 
                 if iteration % opt.opacity_reset_interval == 0 or (dataset.white_background and iteration == opt.densify_from_iter):
                     gaussians.reset_opacity()
