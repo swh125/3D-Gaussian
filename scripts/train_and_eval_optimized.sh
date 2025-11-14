@@ -17,7 +17,7 @@ POSITION_LR_FINAL_OPT="${POSITION_LR_FINAL_OPT:-0.0000016}"
 LAMBDA_DSSIM_OPT="${LAMBDA_DSSIM_OPT:-0.25}"                # Increased SSIM weight
 LAMBDA_EDGE="${LAMBDA_EDGE:-0.1}"                           # Edge loss weight
 DENSIFY_FROM_ITER_OPT="${DENSIFY_FROM_ITER_OPT:-500}"
-DENSIFY_UNTIL_ITER_OPT="${DENSIFY_UNTIL_ITER_OPT:-15000}"
+DENSIFY_UNTIL_ITER_OPT="${DENSIFY_UNTIL_ITER_OPT:-25000}"  # Extended densification period
 DENSIFY_GRAD_THRESHOLD_OPT="${DENSIFY_GRAD_THRESHOLD_OPT:-0.0002}"
 
 echo "==============================================="
@@ -81,4 +81,6 @@ echo "Training and evaluation complete!"
 echo "==============================================="
 echo "Optimized model: ${MODEL_OPT}"
 echo "Metrics saved in: ${MODEL_OPT}/test/ours_${ITERATIONS}/"
+
+
 

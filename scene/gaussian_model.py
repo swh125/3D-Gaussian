@@ -396,10 +396,22 @@ class GaussianModel:
         for group in self.optimizer.param_groups:
             if group["name"] == name:
                 stored_state = self.optimizer.state.get(group['params'][0], None)
-                stored_state["exp_avg"] = torch.zeros_like(tensor)
-                stored_state["exp_avg_sq"] = torch.zeros_like(tensor)
+                
+                # If stored_state is None, create a new state dict
+                if stored_state is None:
+                    stored_state = {}
+                    stored_state["exp_avg"] = torch.zeros_like(tensor)
+                    stored_state["exp_avg_sq"] = torch.zeros_like(tensor)
+                else:
+                    # Update existing state
+                    stored_state["exp_avg"] = torch.zeros_like(tensor)
+                    stored_state["exp_avg_sq"] = torch.zeros_like(tensor)
 
-                del self.optimizer.state[group['params'][0]]
+                # Remove old parameter from optimizer state
+                if group['params'][0] in self.optimizer.state:
+                    del self.optimizer.state[group['params'][0]]
+                
+                # Create new parameter and set state
                 group["params"][0] = nn.Parameter(tensor.requires_grad_(True))
                 self.optimizer.state[group['params'][0]] = stored_state
 
