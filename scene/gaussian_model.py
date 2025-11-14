@@ -518,13 +518,28 @@ class GaussianModel:
         self.max_radii2D = torch.zeros((self.get_xyz.shape[0]), device="cuda")
 
     def densify_and_split(self, grads, grad_threshold, scene_extent, N=2):
+        # Check if grads is empty
+        if grads.shape[0] == 0:
+            return
+        
         n_init_points = self.get_xyz.shape[0]
         # Extract points that satisfy the gradient condition
         padded_grad = torch.zeros((n_init_points), device="cuda")
         padded_grad[:grads.shape[0]] = grads.squeeze()
         selected_pts_mask = torch.where(padded_grad >= grad_threshold, True, False)
-        selected_pts_mask = torch.logical_and(selected_pts_mask,
-                                              torch.max(self.get_scaling, dim=1).values > self.percent_dense*scene_extent)
+        scaling_mask = torch.max(self.get_scaling, dim=1).values > self.percent_dense*scene_extent
+        
+        # Ensure masks have the same length
+        if selected_pts_mask.shape[0] != scaling_mask.shape[0]:
+            min_len = min(selected_pts_mask.shape[0], scaling_mask.shape[0])
+            selected_pts_mask = selected_pts_mask[:min_len]
+            scaling_mask = scaling_mask[:min_len]
+        
+        selected_pts_mask = torch.logical_and(selected_pts_mask, scaling_mask)
+        
+        # If no points selected, return early
+        if selected_pts_mask.sum() == 0:
+            return
 
         stds = self.get_scaling[selected_pts_mask].repeat(N,1)
         means =torch.zeros((stds.size(0), 3),device="cuda")
@@ -546,10 +561,26 @@ class GaussianModel:
         self.prune_points(prune_filter)
 
     def densify_and_clone(self, grads, grad_threshold, scene_extent):
+        # Check if grads is empty
+        if grads.shape[0] == 0:
+            return
+        
         # Extract points that satisfy the gradient condition
         selected_pts_mask = torch.where(torch.norm(grads, dim=-1) >= grad_threshold, True, False)
-        selected_pts_mask = torch.logical_and(selected_pts_mask,
-                                              torch.max(self.get_scaling, dim=1).values <= self.percent_dense*scene_extent)
+        scaling_mask = torch.max(self.get_scaling, dim=1).values <= self.percent_dense*scene_extent
+        
+        # Ensure masks have the same length
+        if selected_pts_mask.shape[0] != scaling_mask.shape[0]:
+            # Pad or trim to match
+            min_len = min(selected_pts_mask.shape[0], scaling_mask.shape[0])
+            selected_pts_mask = selected_pts_mask[:min_len]
+            scaling_mask = scaling_mask[:min_len]
+        
+        selected_pts_mask = torch.logical_and(selected_pts_mask, scaling_mask)
+        
+        # If no points selected, return early
+        if selected_pts_mask.sum() == 0:
+            return
         
         new_xyz = self._xyz[selected_pts_mask]
 
@@ -564,8 +595,21 @@ class GaussianModel:
         self.densification_postfix(new_xyz, new_features_dc, new_features_rest, new_opacities, new_scaling, new_rotation)
 
     def densify_and_prune(self, max_grad, min_opacity, extent, max_screen_size):
-        grads = self.xyz_gradient_accum / self.denom
+        # Avoid division by zero
+        denom_safe = self.denom.clone()
+        denom_safe[denom_safe == 0] = 1.0
+        grads = self.xyz_gradient_accum / denom_safe
         grads[grads.isnan()] = 0.0
+        
+        # Ensure grads has the correct shape
+        n_points = self.get_xyz.shape[0]
+        if grads.shape[0] != n_points:
+            # Pad or trim to match
+            if grads.shape[0] < n_points:
+                padding = torch.zeros((n_points - grads.shape[0], grads.shape[1]), device=grads.device, dtype=grads.dtype)
+                grads = torch.cat([grads, padding], dim=0)
+            else:
+                grads = grads[:n_points]
 
         self.densify_and_clone(grads, max_grad, extent)
         self.densify_and_split(grads, max_grad, extent)
