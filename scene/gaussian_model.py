@@ -137,17 +137,63 @@ class GaussianModel:
         # Ensure both tensors have correct shapes before concatenation
         # features_dc should be (N, 1, 3), features_rest should be (N, (max_sh_degree+1)^2 - 1, 3)
         
-        # Handle empty or incorrectly shaped tensors
+        # Get device and dtype from existing tensors
+        device = features_dc.device if features_dc.numel() > 0 else (features_rest.device if features_rest.numel() > 0 else torch.device("cuda"))
+        dtype = features_dc.dtype if features_dc.numel() > 0 else (features_rest.dtype if features_rest.numel() > 0 else torch.float32)
+        
+        # Get sh_rest_dim
+        sh_rest_dim = (self.max_sh_degree + 1) ** 2 - 1 if hasattr(self, 'max_sh_degree') else 15
+        
+        # Handle empty or incorrectly shaped tensors - force correct shape
         if features_dc.shape[0] == 0:
             # Ensure features_dc has shape (0, 1, 3)
             if len(features_dc.shape) != 3 or features_dc.shape[1] != 1 or features_dc.shape[2] != 3:
-                features_dc = torch.zeros((0, 1, 3), dtype=features_dc.dtype, device=features_dc.device)
+                features_dc = torch.zeros((0, 1, 3), dtype=dtype, device=device)
+        elif len(features_dc.shape) != 3:
+            # If shape is wrong, fix it
+            if features_dc.numel() == 0:
+                features_dc = torch.zeros((0, 1, 3), dtype=dtype, device=device)
+            else:
+                # Try to reshape if possible
+                if features_dc.numel() % 3 == 0:
+                    n = features_dc.numel() // 3
+                    features_dc = features_dc.view(n, 1, 3)
+                else:
+                    features_dc = torch.zeros((0, 1, 3), dtype=dtype, device=device)
         
         if features_rest.shape[0] == 0:
-            # Ensure features_rest has shape (0, (max_sh_degree+1)^2 - 1, 3)
-            sh_rest_dim = (self.max_sh_degree + 1) ** 2 - 1 if hasattr(self, 'max_sh_degree') else 15
+            # Ensure features_rest has shape (0, sh_rest_dim, 3)
             if len(features_rest.shape) != 3 or features_rest.shape[1] != sh_rest_dim or features_rest.shape[2] != 3:
-                features_rest = torch.zeros((0, sh_rest_dim, 3), dtype=features_rest.dtype, device=features_rest.device)
+                features_rest = torch.zeros((0, sh_rest_dim, 3), dtype=dtype, device=device)
+        elif len(features_rest.shape) != 3:
+            # If shape is wrong, fix it
+            if features_rest.numel() == 0:
+                features_rest = torch.zeros((0, sh_rest_dim, 3), dtype=dtype, device=device)
+            else:
+                # Try to reshape if possible
+                expected_elements = sh_rest_dim * 3
+                if features_rest.numel() % expected_elements == 0:
+                    n = features_rest.numel() // expected_elements
+                    features_rest = features_rest.view(n, sh_rest_dim, 3)
+                else:
+                    features_rest = torch.zeros((0, sh_rest_dim, 3), dtype=dtype, device=device)
+        
+        # Final safety check: ensure both have correct shape before concatenation
+        if features_dc.shape[0] == 0:
+            features_dc = torch.zeros((0, 1, 3), dtype=dtype, device=device)
+        if features_rest.shape[0] == 0:
+            features_rest = torch.zeros((0, sh_rest_dim, 3), dtype=dtype, device=device)
+        
+        # Ensure both tensors have the same number of points
+        if features_dc.shape[0] != features_rest.shape[0]:
+            min_n = min(features_dc.shape[0], features_rest.shape[0])
+            if min_n == 0:
+                # Both should be empty with correct shape
+                features_dc = torch.zeros((0, 1, 3), dtype=dtype, device=device)
+                features_rest = torch.zeros((0, sh_rest_dim, 3), dtype=dtype, device=device)
+            else:
+                features_dc = features_dc[:min_n]
+                features_rest = features_rest[:min_n]
         
         return torch.cat((features_dc, features_rest), dim=1)
     
@@ -377,7 +423,7 @@ class GaussianModel:
                 elif group_name == "f_rest":
                     # Infer from existing _features_rest if available, otherwise use default
                     # _features_rest shape is (N, (max_sh_degree+1)^2 - 1, 3)
-                    if hasattr(self, '_features_rest') and self._features_rest.shape[0] > 0:
+                    if hasattr(self, '_features_rest') and self._features_rest.shape[0] > 0 and len(self._features_rest.shape) == 3:
                         empty_shape = (0,) + self._features_rest.shape[1:]
                     elif hasattr(self, 'max_sh_degree'):
                         # For max_sh_degree=3: (3+1)^2 - 1 = 15, so shape is (0, 15, 3)
@@ -602,20 +648,56 @@ class GaussianModel:
         for group in self.optimizer.param_groups:
             assert len(group["params"]) == 1
             extension_tensor = tensors_dict[group["name"]]
-            stored_state = self.optimizer.state.get(group['params'][0], None)
+            existing_param = group["params"][0]
+            group_name = group["name"]
+            
+            # If existing parameter is empty, ensure it has the correct shape before concatenation
+            if existing_param.shape[0] == 0:
+                # Determine correct shape based on extension_tensor
+                if len(existing_param.shape) != len(extension_tensor.shape):
+                    # Reshape existing_param to match extension_tensor's shape (except first dimension)
+                    if group_name == "f_dc":
+                        empty_shape = (0, 1, 3)
+                    elif group_name == "f_rest":
+                        # Infer from extension_tensor or use default
+                        if len(extension_tensor.shape) == 3:
+                            empty_shape = (0,) + extension_tensor.shape[1:]
+                        else:
+                            sh_rest_dim = (self.max_sh_degree + 1) ** 2 - 1 if hasattr(self, 'max_sh_degree') else 15
+                            empty_shape = (0, sh_rest_dim, 3)
+                    elif group_name == "xyz":
+                        empty_shape = (0, 3)
+                    elif group_name == "scaling":
+                        empty_shape = (0, 3)
+                    elif group_name == "rotation":
+                        empty_shape = (0, 4)
+                    elif group_name == "opacity":
+                        empty_shape = (0, 1)
+                    else:
+                        empty_shape = (0,) + extension_tensor.shape[1:]
+                    
+                    # Recreate existing_param with correct shape
+                    existing_param = nn.Parameter(torch.zeros(empty_shape, dtype=existing_param.dtype, device=existing_param.device).requires_grad_(True))
+                    group["params"][0] = existing_param
+                elif existing_param.shape[1:] != extension_tensor.shape[1:]:
+                    # Shape dimensions match but sizes don't - fix it
+                    empty_shape = (0,) + extension_tensor.shape[1:]
+                    existing_param = nn.Parameter(torch.zeros(empty_shape, dtype=existing_param.dtype, device=existing_param.device).requires_grad_(True))
+                    group["params"][0] = existing_param
+            
+            stored_state = self.optimizer.state.get(existing_param, None)
             if stored_state is not None:
-
                 stored_state["exp_avg"] = torch.cat((stored_state["exp_avg"], torch.zeros_like(extension_tensor)), dim=0)
                 stored_state["exp_avg_sq"] = torch.cat((stored_state["exp_avg_sq"], torch.zeros_like(extension_tensor)), dim=0)
 
-                del self.optimizer.state[group['params'][0]]
-                group["params"][0] = nn.Parameter(torch.cat((group["params"][0], extension_tensor), dim=0).requires_grad_(True))
-                self.optimizer.state[group['params'][0]] = stored_state
+                del self.optimizer.state[existing_param]
+                group["params"][0] = nn.Parameter(torch.cat((existing_param, extension_tensor), dim=0).requires_grad_(True))
+                self.optimizer.state[group["params"][0]] = stored_state
 
-                optimizable_tensors[group["name"]] = group["params"][0]
+                optimizable_tensors[group_name] = group["params"][0]
             else:
-                group["params"][0] = nn.Parameter(torch.cat((group["params"][0], extension_tensor), dim=0).requires_grad_(True))
-                optimizable_tensors[group["name"]] = group["params"][0]
+                group["params"][0] = nn.Parameter(torch.cat((existing_param, extension_tensor), dim=0).requires_grad_(True))
+                optimizable_tensors[group_name] = group["params"][0]
 
         return optimizable_tensors
 
