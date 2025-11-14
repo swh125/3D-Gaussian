@@ -56,15 +56,26 @@ def edge_loss(image, gt_image):
     edge_gt = sobel_filter(gt_image)
     return l1_loss(edge_pred, edge_gt)
 
-def training(dataset, opt, pipe, testing_iterations, saving_iterations, checkpoint_iterations, checkpoint, debug_from):
+def training(dataset, opt, pipe, testing_iterations, saving_iterations, checkpoint_iterations, checkpoint, debug_from, finetune_from=None, finetune_lr_scale=0.1):
     first_iter = 0
     tb_writer = prepare_output_and_logger(dataset)
     gaussians = GaussianModel(dataset.sh_degree)
     scene = Scene(dataset, gaussians)
+    
+    # Finetune: load checkpoint and scale down learning rates
+    if finetune_from:
+        checkpoint = finetune_from
+        print(f"Finetuning from {finetune_from} with LR scale {finetune_lr_scale}")
+    
     gaussians.training_setup(opt)
     if checkpoint:
         (model_params, first_iter) = torch.load(checkpoint)
         gaussians.restore(model_params, opt)
+        # Scale down learning rates for finetuning
+        if finetune_from:
+            for param_group in gaussians.optimizer.param_groups:
+                param_group['lr'] *= finetune_lr_scale
+            print(f"Learning rates scaled down by {finetune_lr_scale}")
 
     bg_color = [1, 1, 1] if dataset.white_background else [0, 0, 0]
     background = torch.tensor(bg_color, dtype=torch.float32, device="cuda")
@@ -248,12 +259,16 @@ if __name__ == "__main__":
     parser.add_argument("--checkpoint_iterations", nargs="+", type=int, default=[])
     parser.add_argument("--start_checkpoint", type=str, default = None)
     parser.add_argument("--lambda_edge", type=float, default=0.1, help="Weight for edge loss")
+    parser.add_argument("--finetune_from", type=str, default=None, help="Checkpoint path for finetuning (will scale down learning rates)")
+    parser.add_argument("--finetune_lr_scale", type=float, default=0.1, help="Learning rate scale for finetuning (default: 0.1)")
     args = parser.parse_args(sys.argv[1:])
     args.save_iterations.append(args.iterations)
     
     print("Optimizing " + args.model_path)
     if args.lambda_edge > 0:
         print(f"Using edge loss with weight: {args.lambda_edge}")
+    if args.finetune_from:
+        print(f"Finetuning mode: loading from {args.finetune_from}")
 
     # Initialize system state (RNG)
     safe_state(args.quiet)
@@ -261,7 +276,7 @@ if __name__ == "__main__":
     # Start GUI server, configure and run training
     network_gui.init(args.ip, args.port)
     torch.autograd.set_detect_anomaly(args.detect_anomaly)
-    training(lp.extract(args), op.extract(args), pp.extract(args), args.test_iterations, args.save_iterations, args.checkpoint_iterations, args.start_checkpoint, args.debug_from)
+    training(lp.extract(args), op.extract(args), pp.extract(args), args.test_iterations, args.save_iterations, args.checkpoint_iterations, args.start_checkpoint, args.debug_from, args.finetune_from, args.finetune_lr_scale)
 
     # All done
     print("\nTraining complete.")

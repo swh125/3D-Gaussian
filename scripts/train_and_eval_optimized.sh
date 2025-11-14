@@ -9,7 +9,7 @@ SCENE_ROOT="${SCENE_ROOT:-/home/bygpu/data/video_scene}"
 MODEL_BASELINE="${MODEL_BASELINE:-./output/video_scene_20251113_005931}"
 MODEL_OPT="${MODEL_OPT:-./output/video_scene_optimized_$(date +%Y%m%d_%H%M%S)}"
 ITERATIONS="${ITERATIONS:-30000}"
-TEST_LAST="${TEST_LAST:-15}"  # Last 15 frames for test (320 train, 15 test)
+TEST_LAST="${TEST_LAST:-25}"  # Last 25 frames for test (310 train, 25 test)
 
 # Optimized hyperparameters
 POSITION_LR_INIT_OPT="${POSITION_LR_INIT_OPT:-0.0002}"      # Slightly higher
@@ -27,7 +27,7 @@ echo "Scene root      : ${SCENE_ROOT}"
 echo "Baseline model  : ${MODEL_BASELINE}"
 echo "Optimized model : ${MODEL_OPT}"
 echo "Iterations      : ${ITERATIONS}"
-echo "Train/Test split: 320 / 15"
+echo "Train/Test split: 310 / 25"
 echo ""
 
 # Step 1: Train optimized model
