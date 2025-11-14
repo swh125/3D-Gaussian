@@ -354,6 +354,10 @@ class GaussianModel:
         return optimizable_tensors
 
     def prune_points(self, mask):
+        # Ensure mask is on the same device as parameters
+        if isinstance(mask, torch.Tensor):
+            if mask.device != self._xyz.device:
+                mask = mask.to(self._xyz.device)
         valid_points_mask = ~mask
         optimizable_tensors = self._prune_optimizer(valid_points_mask)
 
@@ -614,10 +618,12 @@ class GaussianModel:
         self.densify_and_clone(grads, max_grad, extent)
         self.densify_and_split(grads, max_grad, extent)
 
-        prune_mask = (self.get_opacity < min_opacity).squeeze()
+        # Ensure all masks are on the same device as parameters
+        device = self._xyz.device
+        prune_mask = (self.get_opacity < min_opacity).squeeze().to(device)
         if max_screen_size:
-            big_points_vs = self.max_radii2D > max_screen_size
-            big_points_ws = self.get_scaling.max(dim=1).values > 0.1 * extent
+            big_points_vs = (self.max_radii2D > max_screen_size).to(device)
+            big_points_ws = (self.get_scaling.max(dim=1).values > 0.1 * extent).to(device)
             prune_mask = torch.logical_or(torch.logical_or(prune_mask, big_points_vs), big_points_ws)
         self.prune_points(prune_mask)
 
