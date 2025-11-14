@@ -115,19 +115,21 @@ def training(dataset, opt, pipe, testing_iterations, saving_iterations, checkpoi
         render_pkg = render(viewpoint_cam, gaussians, pipe, background)
         image, viewspace_point_tensor, visibility_filter, radii = render_pkg["render"], render_pkg["viewspace_points"], render_pkg["visibility_filter"], render_pkg["radii"]
 
-        # Loss computation with additional terms
+        # Loss computation
         gt_image = viewpoint_cam.original_image.cuda()
 
-        # Base losses
+        # Base losses (same as baseline)
         Ll1 = l1_loss(image, gt_image)
         Lssim = (1.0 - ssim(image, gt_image))
         
-        # Additional edge loss (weighted)
+        # Add edge loss (only optimization)
         lambda_edge = getattr(opt, 'lambda_edge', 0.1)
-        Ledge = edge_loss(image, gt_image) if lambda_edge > 0 else torch.tensor(0.0, device=image.device)
-        
-        # Combined loss
-        loss = (1.0 - opt.lambda_dssim) * Ll1 + opt.lambda_dssim * Lssim + lambda_edge * Ledge
+        if lambda_edge > 0:
+            Ledge = edge_loss(image, gt_image)
+            loss = (1.0 - opt.lambda_dssim) * Ll1 + opt.lambda_dssim * Lssim + lambda_edge * Ledge
+        else:
+            # Fallback to baseline loss if edge loss disabled
+            loss = (1.0 - opt.lambda_dssim) * Ll1 + opt.lambda_dssim * Lssim
         
         loss.backward()
 
@@ -147,26 +149,15 @@ def training(dataset, opt, pipe, testing_iterations, saving_iterations, checkpoi
                 print("\n[ITER {}] Saving Gaussians".format(iteration))
                 scene.save(iteration)
 
-            # Densification
+            # Densification (exactly same as baseline - no changes)
             if iteration < opt.densify_until_iter:
                 # Keep track of max radii in image-space for pruning
                 gaussians.max_radii2D[visibility_filter] = torch.max(gaussians.max_radii2D[visibility_filter], radii[visibility_filter])
-                # Only call add_densification_stats if shapes match
-                if visibility_filter.shape[0] == gaussians.xyz_gradient_accum.shape[0] and visibility_filter.numel() > 0:
-                    gaussians.add_densification_stats(viewspace_point_tensor, visibility_filter)
+                gaussians.add_densification_stats(viewspace_point_tensor, visibility_filter)
 
                 if iteration > opt.densify_from_iter and iteration % opt.densification_interval == 0:
-                    # Densification with error handling - skip if shapes don't match
-                    try:
-                        # Check if shapes are compatible before densification
-                        if (gaussians.xyz_gradient_accum.shape[0] == gaussians.get_xyz.shape[0] and
-                            gaussians.denom.shape[0] == gaussians.get_xyz.shape[0] and
-                            gaussians.xyz_gradient_accum.shape[0] > 0):
-                            size_threshold = 20 if iteration > opt.opacity_reset_interval else None
-                            gaussians.densify_and_prune(opt.densify_grad_threshold, 0.005, scene.cameras_extent, size_threshold)
-                    except (RuntimeError, IndexError, ValueError) as e:
-                        # Silently skip densification if there's any error - training continues
-                        pass
+                    size_threshold = 20 if iteration > opt.opacity_reset_interval else None
+                    gaussians.densify_and_prune(opt.densify_grad_threshold, 0.005, scene.cameras_extent, size_threshold)
                 
                 if iteration % opt.opacity_reset_interval == 0 or (dataset.white_background and iteration == opt.densify_from_iter):
                     gaussians.reset_opacity()
