@@ -133,15 +133,22 @@ class GaussianModel:
     def get_features(self):
         features_dc = self._features_dc
         features_rest = self._features_rest
+        
         # Ensure both tensors have correct shapes before concatenation
         # features_dc should be (N, 1, 3), features_rest should be (N, (max_sh_degree+1)^2 - 1, 3)
-        if features_dc.shape[0] == 0 and features_rest.shape[0] == 0:
-            # Both are empty, ensure correct shapes
-            if len(features_dc.shape) < 3:
-                features_dc = features_dc.view(0, 1, 3) if features_dc.numel() == 0 else features_dc
-            if len(features_rest.shape) < 3:
-                sh_rest_dim = (self.max_sh_degree + 1) ** 2 - 1 if hasattr(self, 'max_sh_degree') else 15
-                features_rest = features_rest.view(0, sh_rest_dim, 3) if features_rest.numel() == 0 else features_rest
+        
+        # Handle empty or incorrectly shaped tensors
+        if features_dc.shape[0] == 0:
+            # Ensure features_dc has shape (0, 1, 3)
+            if len(features_dc.shape) != 3 or features_dc.shape[1] != 1 or features_dc.shape[2] != 3:
+                features_dc = torch.zeros((0, 1, 3), dtype=features_dc.dtype, device=features_dc.device)
+        
+        if features_rest.shape[0] == 0:
+            # Ensure features_rest has shape (0, (max_sh_degree+1)^2 - 1, 3)
+            sh_rest_dim = (self.max_sh_degree + 1) ** 2 - 1 if hasattr(self, 'max_sh_degree') else 15
+            if len(features_rest.shape) != 3 or features_rest.shape[1] != sh_rest_dim or features_rest.shape[2] != 3:
+                features_rest = torch.zeros((0, sh_rest_dim, 3), dtype=features_rest.dtype, device=features_rest.device)
+        
         return torch.cat((features_dc, features_rest), dim=1)
     
     @property
