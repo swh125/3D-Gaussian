@@ -394,6 +394,21 @@ class GaussianModel:
         if isinstance(mask, torch.Tensor):
             if mask.device != self._xyz.device:
                 mask = mask.to(self._xyz.device)
+        
+        # Get current number of points
+        n_points = self._xyz.shape[0]
+        
+        # Ensure mask length matches current number of points
+        if isinstance(mask, torch.Tensor):
+            mask_len = mask.shape[0]
+            if mask_len != n_points:
+                if mask_len > n_points:
+                    mask = mask[:n_points]
+                else:
+                    # Pad mask with False (keep all remaining points)
+                    padding = torch.zeros(n_points - mask_len, dtype=mask.dtype, device=mask.device)
+                    mask = torch.cat([mask, padding], dim=0)
+        
         valid_points_mask = ~mask
         optimizable_tensors = self._prune_optimizer(valid_points_mask)
 
@@ -407,10 +422,29 @@ class GaussianModel:
         self._scaling = optimizable_tensors["scaling"]
         self._rotation = optimizable_tensors["rotation"]
 
-        self.xyz_gradient_accum = self.xyz_gradient_accum[valid_points_mask]
-
-        self.denom = self.denom[valid_points_mask]
-        self.max_radii2D = self.max_radii2D[valid_points_mask]
+        # Update auxiliary tensors only if they match the original length
+        new_n_points = self._xyz.shape[0]
+        
+        # xyz_gradient_accum
+        if self.xyz_gradient_accum.shape[0] == n_points:
+            self.xyz_gradient_accum = self.xyz_gradient_accum[valid_points_mask]
+        else:
+            # Reinitialize if shape doesn't match
+            self.xyz_gradient_accum = torch.zeros((new_n_points, 1), device=self._xyz.device)
+        
+        # denom
+        if self.denom.shape[0] == n_points:
+            self.denom = self.denom[valid_points_mask]
+        else:
+            # Reinitialize if shape doesn't match
+            self.denom = torch.zeros((new_n_points, 1), device=self._xyz.device)
+        
+        # max_radii2D
+        if self.max_radii2D.shape[0] == n_points:
+            self.max_radii2D = self.max_radii2D[valid_points_mask]
+        else:
+            # Reinitialize if shape doesn't match
+            self.max_radii2D = torch.zeros((new_n_points,), device=self._xyz.device)
 
     @torch.no_grad()
     def segment(self, mask=None):
