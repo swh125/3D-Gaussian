@@ -336,26 +336,47 @@ class GaussianModel:
         return optimizable_tensors
 
     def _prune_optimizer(self, mask):
-        # Ensure mask is on the same device as the first parameter
-        if len(self.optimizer.param_groups) > 0:
-            first_param = self.optimizer.param_groups[0]['params'][0]
-            if isinstance(mask, torch.Tensor) and mask.device != first_param.device:
-                mask = mask.to(first_param.device)
-        
         optimizable_tensors = {}
         for group in self.optimizer.param_groups:
-            stored_state = self.optimizer.state.get(group['params'][0], None)
+            param = group['params'][0]
+            
+            # Skip if parameter is empty
+            if param.shape[0] == 0:
+                continue
+            
+            # Ensure mask is on the same device as the parameter
+            if isinstance(mask, torch.Tensor):
+                if mask.device != param.device:
+                    mask = mask.to(param.device)
+                
+                # Ensure mask length matches parameter length
+                param_len = param.shape[0]
+                mask_len = mask.shape[0]
+                
+                if mask_len != param_len:
+                    # Adjust mask to match parameter length
+                    if mask_len > param_len:
+                        mask = mask[:param_len]
+                    else:
+                        # Pad mask with False (keep all remaining points)
+                        padding = torch.zeros(param_len - mask_len, dtype=mask.dtype, device=mask.device)
+                        mask = torch.cat([mask, padding], dim=0)
+            
+            stored_state = self.optimizer.state.get(param, None)
             if stored_state is not None:
-                stored_state["exp_avg"] = stored_state["exp_avg"][mask]
-                stored_state["exp_avg_sq"] = stored_state["exp_avg_sq"][mask]
+                # Ensure stored state tensors match parameter length
+                if "exp_avg" in stored_state and stored_state["exp_avg"].shape[0] == param.shape[0]:
+                    stored_state["exp_avg"] = stored_state["exp_avg"][mask]
+                if "exp_avg_sq" in stored_state and stored_state["exp_avg_sq"].shape[0] == param.shape[0]:
+                    stored_state["exp_avg_sq"] = stored_state["exp_avg_sq"][mask]
 
-                del self.optimizer.state[group['params'][0]]
-                group["params"][0] = nn.Parameter((group["params"][0][mask].requires_grad_(True)))
-                self.optimizer.state[group['params'][0]] = stored_state
+                del self.optimizer.state[param]
+                group["params"][0] = nn.Parameter((param[mask].requires_grad_(True)))
+                self.optimizer.state[group["params"][0]] = stored_state
 
                 optimizable_tensors[group["name"]] = group["params"][0]
             else:
-                group["params"][0] = nn.Parameter(group["params"][0][mask].requires_grad_(True))
+                group["params"][0] = nn.Parameter(param[mask].requires_grad_(True))
                 optimizable_tensors[group["name"]] = group["params"][0]
         return optimizable_tensors
 
