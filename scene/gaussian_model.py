@@ -352,12 +352,31 @@ class GaussianModel:
             
             # Handle empty parameters - create empty tensor but keep the key
             if param.shape[0] == 0:
-                # Create an empty parameter with the same shape (preserve all dimensions except first)
-                # This is important for multi-dimensional tensors like rotation (N, 4)
-                if len(param.shape) > 1:
-                    empty_shape = (0,) + param.shape[1:]
+                # Determine correct shape based on parameter name
+                # This is critical for maintaining correct tensor dimensions
+                if group_name == "xyz":
+                    empty_shape = (0, 3)  # (N, 3)
+                elif group_name == "f_dc":
+                    empty_shape = (0, 1, 3)  # (N, 1, 3) for SH degree 0
+                elif group_name == "f_rest":
+                    # Infer from existing _features_rest if available, otherwise use default
+                    if hasattr(self, '_features_rest') and self._features_rest.shape[0] > 0:
+                        empty_shape = (0,) + self._features_rest.shape[1:]
+                    else:
+                        empty_shape = (0, 1, 45)  # Default for max_sh_degree=3
+                elif group_name == "scaling":
+                    empty_shape = (0, 3)  # (N, 3)
+                elif group_name == "rotation":
+                    empty_shape = (0, 4)  # (N, 4) quaternion
+                elif group_name == "opacity":
+                    empty_shape = (0, 1)  # (N, 1)
                 else:
-                    empty_shape = (0,)
+                    # Fallback: preserve original shape if it has dimensions
+                    if len(param.shape) > 1:
+                        empty_shape = (0,) + param.shape[1:]
+                    else:
+                        empty_shape = (0,)
+                
                 # Use zeros instead of empty to ensure proper initialization
                 empty_param = nn.Parameter(torch.zeros(empty_shape, dtype=param.dtype, device=param.device).requires_grad_(True))
                 group["params"][0] = empty_param
