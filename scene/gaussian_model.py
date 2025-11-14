@@ -339,9 +339,18 @@ class GaussianModel:
         optimizable_tensors = {}
         for group in self.optimizer.param_groups:
             param = group['params'][0]
+            group_name = group["name"]
             
-            # Skip if parameter is empty
+            # Handle empty parameters - create empty tensor but keep the key
             if param.shape[0] == 0:
+                # Create an empty parameter with the same shape (except first dimension)
+                if len(param.shape) > 1:
+                    empty_shape = (0,) + param.shape[1:]
+                else:
+                    empty_shape = (0,)
+                empty_param = nn.Parameter(torch.empty(empty_shape, dtype=param.dtype, device=param.device).requires_grad_(True))
+                group["params"][0] = empty_param
+                optimizable_tensors[group_name] = empty_param
                 continue
             
             # Ensure mask is on the same device as the parameter
@@ -374,10 +383,10 @@ class GaussianModel:
                 group["params"][0] = nn.Parameter((param[mask].requires_grad_(True)))
                 self.optimizer.state[group["params"][0]] = stored_state
 
-                optimizable_tensors[group["name"]] = group["params"][0]
+                optimizable_tensors[group_name] = group["params"][0]
             else:
                 group["params"][0] = nn.Parameter(param[mask].requires_grad_(True))
-                optimizable_tensors[group["name"]] = group["params"][0]
+                optimizable_tensors[group_name] = group["params"][0]
         return optimizable_tensors
 
     def prune_points(self, mask):
