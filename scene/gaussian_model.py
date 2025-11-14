@@ -336,6 +336,12 @@ class GaussianModel:
         return optimizable_tensors
 
     def _prune_optimizer(self, mask):
+        # Ensure mask is on the same device as the first parameter
+        if len(self.optimizer.param_groups) > 0:
+            first_param = self.optimizer.param_groups[0]['params'][0]
+            if isinstance(mask, torch.Tensor) and mask.device != first_param.device:
+                mask = mask.to(first_param.device)
+        
         optimizable_tensors = {}
         for group in self.optimizer.param_groups:
             stored_state = self.optimizer.state.get(group['params'][0], None)
