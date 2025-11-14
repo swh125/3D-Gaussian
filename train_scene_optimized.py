@@ -113,11 +113,20 @@ def training(dataset, opt, pipe, testing_iterations, saving_iterations, checkpoi
             pipe.debug = True
 
         render_pkg = render(viewpoint_cam, gaussians, pipe, background)
-        image, viewspace_point_tensor, visibility_filter, radii = render_pkg["render"], render_pkg["viewspace_points"], render_pkg["visibility_filter"], render_pkg["radii"]
+        image = render_pkg["render"]
+        viewspace_point_tensor = render_pkg["viewspace_points"]
+        visibility_filter = render_pkg["visibility_filter"]
+        radii = render_pkg["radii"]
+        
+        # Ensure all tensors are on the same device (CUDA)
+        device = image.device
+        viewspace_point_tensor = viewspace_point_tensor.to(device)
+        visibility_filter = visibility_filter.to(device) if isinstance(visibility_filter, torch.Tensor) else visibility_filter
+        radii = radii.to(device)
 
         # Loss computation with additional terms
         # Ensure gt_image is on the same device as rendered image
-        gt_image = viewpoint_cam.original_image.to(image.device)
+        gt_image = viewpoint_cam.original_image.to(device)
 
         # Base losses
         Ll1 = l1_loss(image, gt_image)

@@ -737,6 +737,15 @@ class GaussianModel:
         if grad is None or grad.numel() == 0:
             return
 
+        # Ensure grad is on the same device as xyz_gradient_accum
+        device = self.xyz_gradient_accum.device
+        if grad.device != device:
+            grad = grad.to(device)
+        
+        # Ensure update_filter is on the same device
+        if isinstance(update_filter, torch.Tensor) and update_filter.device != device:
+            update_filter = update_filter.to(device)
+
         idx = torch.nonzero(update_filter, as_tuple=False).flatten()
         if idx.numel() == 0:
             return
