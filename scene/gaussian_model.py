@@ -133,6 +133,15 @@ class GaussianModel:
     def get_features(self):
         features_dc = self._features_dc
         features_rest = self._features_rest
+        # Ensure both tensors have correct shapes before concatenation
+        # features_dc should be (N, 1, 3), features_rest should be (N, (max_sh_degree+1)^2 - 1, 3)
+        if features_dc.shape[0] == 0 and features_rest.shape[0] == 0:
+            # Both are empty, ensure correct shapes
+            if len(features_dc.shape) < 3:
+                features_dc = features_dc.view(0, 1, 3) if features_dc.numel() == 0 else features_dc
+            if len(features_rest.shape) < 3:
+                sh_rest_dim = (self.max_sh_degree + 1) ** 2 - 1 if hasattr(self, 'max_sh_degree') else 15
+                features_rest = features_rest.view(0, sh_rest_dim, 3) if features_rest.numel() == 0 else features_rest
         return torch.cat((features_dc, features_rest), dim=1)
     
     @property
@@ -360,10 +369,16 @@ class GaussianModel:
                     empty_shape = (0, 1, 3)  # (N, 1, 3) for SH degree 0
                 elif group_name == "f_rest":
                     # Infer from existing _features_rest if available, otherwise use default
+                    # _features_rest shape is (N, (max_sh_degree+1)^2 - 1, 3)
                     if hasattr(self, '_features_rest') and self._features_rest.shape[0] > 0:
                         empty_shape = (0,) + self._features_rest.shape[1:]
+                    elif hasattr(self, 'max_sh_degree'):
+                        # For max_sh_degree=3: (3+1)^2 - 1 = 15, so shape is (0, 15, 3)
+                        sh_rest_dim = (self.max_sh_degree + 1) ** 2 - 1
+                        empty_shape = (0, sh_rest_dim, 3)
                     else:
-                        empty_shape = (0, 1, 45)  # Default for max_sh_degree=3
+                        # Fallback: assume max_sh_degree=3
+                        empty_shape = (0, 15, 3)
                 elif group_name == "scaling":
                     empty_shape = (0, 3)  # (N, 3)
                 elif group_name == "rotation":
