@@ -110,16 +110,7 @@ class GaussianModel:
     
     @property
     def get_rotation(self):
-        # Handle empty rotation tensor
-        if self._rotation.shape[0] == 0:
-            return self._rotation
-        # Ensure rotation has correct shape (N, 4) for normalize
-        if len(self._rotation.shape) == 1:
-            # If rotation is 1D, reshape to (N, 4) - this shouldn't happen normally
-            # but handle it gracefully
-            return self._rotation
-        # Normalize along dim=1 (quaternion dimension)
-        return self.rotation_activation(self._rotation, dim=1)
+        return self.rotation_activation(self._rotation)
     
     @property
     def get_xyz(self):
@@ -133,68 +124,6 @@ class GaussianModel:
     def get_features(self):
         features_dc = self._features_dc
         features_rest = self._features_rest
-        
-        # Ensure both tensors have correct shapes before concatenation
-        # features_dc should be (N, 1, 3), features_rest should be (N, (max_sh_degree+1)^2 - 1, 3)
-        
-        # Get device and dtype from existing tensors
-        device = features_dc.device if features_dc.numel() > 0 else (features_rest.device if features_rest.numel() > 0 else torch.device("cuda"))
-        dtype = features_dc.dtype if features_dc.numel() > 0 else (features_rest.dtype if features_rest.numel() > 0 else torch.float32)
-        
-        # Get sh_rest_dim
-        sh_rest_dim = (self.max_sh_degree + 1) ** 2 - 1 if hasattr(self, 'max_sh_degree') else 15
-        
-        # Handle empty or incorrectly shaped tensors - force correct shape
-        if features_dc.shape[0] == 0:
-            # Ensure features_dc has shape (0, 1, 3)
-            if len(features_dc.shape) != 3 or features_dc.shape[1] != 1 or features_dc.shape[2] != 3:
-                features_dc = torch.zeros((0, 1, 3), dtype=dtype, device=device)
-        elif len(features_dc.shape) != 3:
-            # If shape is wrong, fix it
-            if features_dc.numel() == 0:
-                features_dc = torch.zeros((0, 1, 3), dtype=dtype, device=device)
-            else:
-                # Try to reshape if possible
-                if features_dc.numel() % 3 == 0:
-                    n = features_dc.numel() // 3
-                    features_dc = features_dc.view(n, 1, 3)
-                else:
-                    features_dc = torch.zeros((0, 1, 3), dtype=dtype, device=device)
-        
-        if features_rest.shape[0] == 0:
-            # Ensure features_rest has shape (0, sh_rest_dim, 3)
-            if len(features_rest.shape) != 3 or features_rest.shape[1] != sh_rest_dim or features_rest.shape[2] != 3:
-                features_rest = torch.zeros((0, sh_rest_dim, 3), dtype=dtype, device=device)
-        elif len(features_rest.shape) != 3:
-            # If shape is wrong, fix it
-            if features_rest.numel() == 0:
-                features_rest = torch.zeros((0, sh_rest_dim, 3), dtype=dtype, device=device)
-            else:
-                # Try to reshape if possible
-                expected_elements = sh_rest_dim * 3
-                if features_rest.numel() % expected_elements == 0:
-                    n = features_rest.numel() // expected_elements
-                    features_rest = features_rest.view(n, sh_rest_dim, 3)
-                else:
-                    features_rest = torch.zeros((0, sh_rest_dim, 3), dtype=dtype, device=device)
-        
-        # Final safety check: ensure both have correct shape before concatenation
-        if features_dc.shape[0] == 0:
-            features_dc = torch.zeros((0, 1, 3), dtype=dtype, device=device)
-        if features_rest.shape[0] == 0:
-            features_rest = torch.zeros((0, sh_rest_dim, 3), dtype=dtype, device=device)
-        
-        # Ensure both tensors have the same number of points
-        if features_dc.shape[0] != features_rest.shape[0]:
-            min_n = min(features_dc.shape[0], features_rest.shape[0])
-            if min_n == 0:
-                # Both should be empty with correct shape
-                features_dc = torch.zeros((0, 1, 3), dtype=dtype, device=device)
-                features_rest = torch.zeros((0, sh_rest_dim, 3), dtype=dtype, device=device)
-            else:
-                features_dc = features_dc[:min_n]
-                features_rest = features_rest[:min_n]
-        
         return torch.cat((features_dc, features_rest), dim=1)
     
     @property
@@ -396,22 +325,10 @@ class GaussianModel:
         for group in self.optimizer.param_groups:
             if group["name"] == name:
                 stored_state = self.optimizer.state.get(group['params'][0], None)
-                
-                # If stored_state is None, create a new state dict
-                if stored_state is None:
-                    stored_state = {}
-                    stored_state["exp_avg"] = torch.zeros_like(tensor)
-                    stored_state["exp_avg_sq"] = torch.zeros_like(tensor)
-                else:
-                    # Update existing state
-                    stored_state["exp_avg"] = torch.zeros_like(tensor)
-                    stored_state["exp_avg_sq"] = torch.zeros_like(tensor)
+                stored_state["exp_avg"] = torch.zeros_like(tensor)
+                stored_state["exp_avg_sq"] = torch.zeros_like(tensor)
 
-                # Remove old parameter from optimizer state
-                if group['params'][0] in self.optimizer.state:
-                    del self.optimizer.state[group['params'][0]]
-                
-                # Create new parameter and set state
+                del self.optimizer.state[group['params'][0]]
                 group["params"][0] = nn.Parameter(tensor.requires_grad_(True))
                 self.optimizer.state[group['params'][0]] = stored_state
 
@@ -421,104 +338,22 @@ class GaussianModel:
     def _prune_optimizer(self, mask):
         optimizable_tensors = {}
         for group in self.optimizer.param_groups:
-            param = group['params'][0]
-            group_name = group["name"]
-            
-            # Handle empty parameters - create empty tensor but keep the key
-            if param.shape[0] == 0:
-                # Determine correct shape based on parameter name
-                # This is critical for maintaining correct tensor dimensions
-                if group_name == "xyz":
-                    empty_shape = (0, 3)  # (N, 3)
-                elif group_name == "f_dc":
-                    empty_shape = (0, 1, 3)  # (N, 1, 3) for SH degree 0
-                elif group_name == "f_rest":
-                    # Infer from existing _features_rest if available, otherwise use default
-                    # _features_rest shape is (N, (max_sh_degree+1)^2 - 1, 3)
-                    if hasattr(self, '_features_rest') and self._features_rest.shape[0] > 0 and len(self._features_rest.shape) == 3:
-                        empty_shape = (0,) + self._features_rest.shape[1:]
-                    elif hasattr(self, 'max_sh_degree'):
-                        # For max_sh_degree=3: (3+1)^2 - 1 = 15, so shape is (0, 15, 3)
-                        sh_rest_dim = (self.max_sh_degree + 1) ** 2 - 1
-                        empty_shape = (0, sh_rest_dim, 3)
-                    else:
-                        # Fallback: assume max_sh_degree=3
-                        empty_shape = (0, 15, 3)
-                elif group_name == "scaling":
-                    empty_shape = (0, 3)  # (N, 3)
-                elif group_name == "rotation":
-                    empty_shape = (0, 4)  # (N, 4) quaternion
-                elif group_name == "opacity":
-                    empty_shape = (0, 1)  # (N, 1)
-                else:
-                    # Fallback: preserve original shape if it has dimensions
-                    if len(param.shape) > 1:
-                        empty_shape = (0,) + param.shape[1:]
-                    else:
-                        empty_shape = (0,)
-                
-                # Use zeros instead of empty to ensure proper initialization
-                empty_param = nn.Parameter(torch.zeros(empty_shape, dtype=param.dtype, device=param.device).requires_grad_(True))
-                group["params"][0] = empty_param
-                optimizable_tensors[group_name] = empty_param
-                continue
-            
-            # Ensure mask is on the same device as the parameter
-            if isinstance(mask, torch.Tensor):
-                if mask.device != param.device:
-                    mask = mask.to(param.device)
-                
-                # Ensure mask length matches parameter length
-                param_len = param.shape[0]
-                mask_len = mask.shape[0]
-                
-                if mask_len != param_len:
-                    # Adjust mask to match parameter length
-                    if mask_len > param_len:
-                        mask = mask[:param_len]
-                    else:
-                        # Pad mask with False (keep all remaining points)
-                        padding = torch.zeros(param_len - mask_len, dtype=mask.dtype, device=mask.device)
-                        mask = torch.cat([mask, padding], dim=0)
-            
-            stored_state = self.optimizer.state.get(param, None)
+            stored_state = self.optimizer.state.get(group['params'][0], None)
             if stored_state is not None:
-                # Ensure stored state tensors match parameter length
-                if "exp_avg" in stored_state and stored_state["exp_avg"].shape[0] == param.shape[0]:
-                    stored_state["exp_avg"] = stored_state["exp_avg"][mask]
-                if "exp_avg_sq" in stored_state and stored_state["exp_avg_sq"].shape[0] == param.shape[0]:
-                    stored_state["exp_avg_sq"] = stored_state["exp_avg_sq"][mask]
+                stored_state["exp_avg"] = stored_state["exp_avg"][mask]
+                stored_state["exp_avg_sq"] = stored_state["exp_avg_sq"][mask]
 
-                del self.optimizer.state[param]
-                group["params"][0] = nn.Parameter((param[mask].requires_grad_(True)))
-                self.optimizer.state[group["params"][0]] = stored_state
+                del self.optimizer.state[group['params'][0]]
+                group["params"][0] = nn.Parameter((group["params"][0][mask].requires_grad_(True)))
+                self.optimizer.state[group['params'][0]] = stored_state
 
-                optimizable_tensors[group_name] = group["params"][0]
+                optimizable_tensors[group["name"]] = group["params"][0]
             else:
-                group["params"][0] = nn.Parameter(param[mask].requires_grad_(True))
-                optimizable_tensors[group_name] = group["params"][0]
+                group["params"][0] = nn.Parameter(group["params"][0][mask].requires_grad_(True))
+                optimizable_tensors[group["name"]] = group["params"][0]
         return optimizable_tensors
 
     def prune_points(self, mask):
-        # Ensure mask is on the same device as parameters
-        if isinstance(mask, torch.Tensor):
-            if mask.device != self._xyz.device:
-                mask = mask.to(self._xyz.device)
-        
-        # Get current number of points
-        n_points = self._xyz.shape[0]
-        
-        # Ensure mask length matches current number of points
-        if isinstance(mask, torch.Tensor):
-            mask_len = mask.shape[0]
-            if mask_len != n_points:
-                if mask_len > n_points:
-                    mask = mask[:n_points]
-                else:
-                    # Pad mask with False (keep all remaining points)
-                    padding = torch.zeros(n_points - mask_len, dtype=mask.dtype, device=mask.device)
-                    mask = torch.cat([mask, padding], dim=0)
-        
         valid_points_mask = ~mask
         optimizable_tensors = self._prune_optimizer(valid_points_mask)
 
@@ -532,29 +367,10 @@ class GaussianModel:
         self._scaling = optimizable_tensors["scaling"]
         self._rotation = optimizable_tensors["rotation"]
 
-        # Update auxiliary tensors only if they match the original length
-        new_n_points = self._xyz.shape[0]
-        
-        # xyz_gradient_accum
-        if self.xyz_gradient_accum.shape[0] == n_points:
-            self.xyz_gradient_accum = self.xyz_gradient_accum[valid_points_mask]
-        else:
-            # Reinitialize if shape doesn't match
-            self.xyz_gradient_accum = torch.zeros((new_n_points, 1), device=self._xyz.device)
-        
-        # denom
-        if self.denom.shape[0] == n_points:
-            self.denom = self.denom[valid_points_mask]
-        else:
-            # Reinitialize if shape doesn't match
-            self.denom = torch.zeros((new_n_points, 1), device=self._xyz.device)
-        
-        # max_radii2D
-        if self.max_radii2D.shape[0] == n_points:
-            self.max_radii2D = self.max_radii2D[valid_points_mask]
-        else:
-            # Reinitialize if shape doesn't match
-            self.max_radii2D = torch.zeros((new_n_points,), device=self._xyz.device)
+        self.xyz_gradient_accum = self.xyz_gradient_accum[valid_points_mask]
+
+        self.denom = self.denom[valid_points_mask]
+        self.max_radii2D = self.max_radii2D[valid_points_mask]
 
     @torch.no_grad()
     def segment(self, mask=None):
@@ -660,56 +476,20 @@ class GaussianModel:
         for group in self.optimizer.param_groups:
             assert len(group["params"]) == 1
             extension_tensor = tensors_dict[group["name"]]
-            existing_param = group["params"][0]
-            group_name = group["name"]
-            
-            # If existing parameter is empty, ensure it has the correct shape before concatenation
-            if existing_param.shape[0] == 0:
-                # Determine correct shape based on extension_tensor
-                if len(existing_param.shape) != len(extension_tensor.shape):
-                    # Reshape existing_param to match extension_tensor's shape (except first dimension)
-                    if group_name == "f_dc":
-                        empty_shape = (0, 1, 3)
-                    elif group_name == "f_rest":
-                        # Infer from extension_tensor or use default
-                        if len(extension_tensor.shape) == 3:
-                            empty_shape = (0,) + extension_tensor.shape[1:]
-                        else:
-                            sh_rest_dim = (self.max_sh_degree + 1) ** 2 - 1 if hasattr(self, 'max_sh_degree') else 15
-                            empty_shape = (0, sh_rest_dim, 3)
-                    elif group_name == "xyz":
-                        empty_shape = (0, 3)
-                    elif group_name == "scaling":
-                        empty_shape = (0, 3)
-                    elif group_name == "rotation":
-                        empty_shape = (0, 4)
-                    elif group_name == "opacity":
-                        empty_shape = (0, 1)
-                    else:
-                        empty_shape = (0,) + extension_tensor.shape[1:]
-                    
-                    # Recreate existing_param with correct shape
-                    existing_param = nn.Parameter(torch.zeros(empty_shape, dtype=existing_param.dtype, device=existing_param.device).requires_grad_(True))
-                    group["params"][0] = existing_param
-                elif existing_param.shape[1:] != extension_tensor.shape[1:]:
-                    # Shape dimensions match but sizes don't - fix it
-                    empty_shape = (0,) + extension_tensor.shape[1:]
-                    existing_param = nn.Parameter(torch.zeros(empty_shape, dtype=existing_param.dtype, device=existing_param.device).requires_grad_(True))
-                    group["params"][0] = existing_param
-            
-            stored_state = self.optimizer.state.get(existing_param, None)
+            stored_state = self.optimizer.state.get(group['params'][0], None)
             if stored_state is not None:
+
                 stored_state["exp_avg"] = torch.cat((stored_state["exp_avg"], torch.zeros_like(extension_tensor)), dim=0)
                 stored_state["exp_avg_sq"] = torch.cat((stored_state["exp_avg_sq"], torch.zeros_like(extension_tensor)), dim=0)
 
-                del self.optimizer.state[existing_param]
-                group["params"][0] = nn.Parameter(torch.cat((existing_param, extension_tensor), dim=0).requires_grad_(True))
-                self.optimizer.state[group["params"][0]] = stored_state
+                del self.optimizer.state[group['params'][0]]
+                group["params"][0] = nn.Parameter(torch.cat((group["params"][0], extension_tensor), dim=0).requires_grad_(True))
+                self.optimizer.state[group['params'][0]] = stored_state
 
-                optimizable_tensors[group_name] = group["params"][0]
+                optimizable_tensors[group["name"]] = group["params"][0]
             else:
-                group["params"][0] = nn.Parameter(torch.cat((existing_param, extension_tensor), dim=0).requires_grad_(True))
-                optimizable_tensors[group_name] = group["params"][0]
+                group["params"][0] = nn.Parameter(torch.cat((group["params"][0], extension_tensor), dim=0).requires_grad_(True))
+                optimizable_tensors[group["name"]] = group["params"][0]
 
         return optimizable_tensors
 
@@ -738,28 +518,13 @@ class GaussianModel:
         self.max_radii2D = torch.zeros((self.get_xyz.shape[0]), device="cuda")
 
     def densify_and_split(self, grads, grad_threshold, scene_extent, N=2):
-        # Check if grads is empty
-        if grads.shape[0] == 0:
-            return
-        
         n_init_points = self.get_xyz.shape[0]
         # Extract points that satisfy the gradient condition
         padded_grad = torch.zeros((n_init_points), device="cuda")
         padded_grad[:grads.shape[0]] = grads.squeeze()
         selected_pts_mask = torch.where(padded_grad >= grad_threshold, True, False)
-        scaling_mask = torch.max(self.get_scaling, dim=1).values > self.percent_dense*scene_extent
-        
-        # Ensure masks have the same length
-        if selected_pts_mask.shape[0] != scaling_mask.shape[0]:
-            min_len = min(selected_pts_mask.shape[0], scaling_mask.shape[0])
-            selected_pts_mask = selected_pts_mask[:min_len]
-            scaling_mask = scaling_mask[:min_len]
-        
-        selected_pts_mask = torch.logical_and(selected_pts_mask, scaling_mask)
-        
-        # If no points selected, return early
-        if selected_pts_mask.sum() == 0:
-            return
+        selected_pts_mask = torch.logical_and(selected_pts_mask,
+                                              torch.max(self.get_scaling, dim=1).values > self.percent_dense*scene_extent)
 
         stds = self.get_scaling[selected_pts_mask].repeat(N,1)
         means =torch.zeros((stds.size(0), 3),device="cuda")
@@ -781,26 +546,10 @@ class GaussianModel:
         self.prune_points(prune_filter)
 
     def densify_and_clone(self, grads, grad_threshold, scene_extent):
-        # Check if grads is empty
-        if grads.shape[0] == 0:
-            return
-        
         # Extract points that satisfy the gradient condition
         selected_pts_mask = torch.where(torch.norm(grads, dim=-1) >= grad_threshold, True, False)
-        scaling_mask = torch.max(self.get_scaling, dim=1).values <= self.percent_dense*scene_extent
-        
-        # Ensure masks have the same length
-        if selected_pts_mask.shape[0] != scaling_mask.shape[0]:
-            # Pad or trim to match
-            min_len = min(selected_pts_mask.shape[0], scaling_mask.shape[0])
-            selected_pts_mask = selected_pts_mask[:min_len]
-            scaling_mask = scaling_mask[:min_len]
-        
-        selected_pts_mask = torch.logical_and(selected_pts_mask, scaling_mask)
-        
-        # If no points selected, return early
-        if selected_pts_mask.sum() == 0:
-            return
+        selected_pts_mask = torch.logical_and(selected_pts_mask,
+                                              torch.max(self.get_scaling, dim=1).values <= self.percent_dense*scene_extent)
         
         new_xyz = self._xyz[selected_pts_mask]
 
@@ -815,71 +564,21 @@ class GaussianModel:
         self.densification_postfix(new_xyz, new_features_dc, new_features_rest, new_opacities, new_scaling, new_rotation)
 
     def densify_and_prune(self, max_grad, min_opacity, extent, max_screen_size):
-        # Avoid division by zero
-        denom_safe = self.denom.clone()
-        denom_safe[denom_safe == 0] = 1.0
-        grads = self.xyz_gradient_accum / denom_safe
+        grads = self.xyz_gradient_accum / self.denom
         grads[grads.isnan()] = 0.0
-        
-        # Ensure grads has the correct shape
-        n_points = self.get_xyz.shape[0]
-        if grads.shape[0] != n_points:
-            # Pad or trim to match
-            if grads.shape[0] < n_points:
-                padding = torch.zeros((n_points - grads.shape[0], grads.shape[1]), device=grads.device, dtype=grads.dtype)
-                grads = torch.cat([grads, padding], dim=0)
-            else:
-                grads = grads[:n_points]
 
         self.densify_and_clone(grads, max_grad, extent)
         self.densify_and_split(grads, max_grad, extent)
 
-        # Ensure all masks are on the same device as parameters
-        device = self._xyz.device
-        prune_mask = (self.get_opacity < min_opacity).squeeze().to(device)
+        prune_mask = (self.get_opacity < min_opacity).squeeze()
         if max_screen_size:
-            big_points_vs = (self.max_radii2D > max_screen_size).to(device)
-            big_points_ws = (self.get_scaling.max(dim=1).values > 0.1 * extent).to(device)
+            big_points_vs = self.max_radii2D > max_screen_size
+            big_points_ws = self.get_scaling.max(dim=1).values > 0.1 * extent
             prune_mask = torch.logical_or(torch.logical_or(prune_mask, big_points_vs), big_points_ws)
         self.prune_points(prune_mask)
 
         torch.cuda.empty_cache()
 
     def add_densification_stats(self, viewspace_point_tensor, update_filter):
-        if update_filter is None or update_filter.numel() == 0:
-            return
-
-        grad = viewspace_point_tensor.grad
-        if grad is None or grad.numel() == 0:
-            return
-
-        # Ensure grad is on the same device as xyz_gradient_accum
-        device = self.xyz_gradient_accum.device
-        if grad.device != device:
-            grad = grad.to(device)
-        
-        # Ensure update_filter is on the same device
-        if isinstance(update_filter, torch.Tensor) and update_filter.device != device:
-            update_filter = update_filter.to(device)
-
-        idx = torch.nonzero(update_filter, as_tuple=False).flatten()
-        if idx.numel() == 0:
-            return
-
-        max_valid = grad.shape[0]
-        if max_valid == 0:
-            return
-
-        max_points = self.xyz_gradient_accum.shape[0]
-        if max_points == 0:
-            return
-
-        limit = min(max_valid, max_points)
-        valid_idx = idx[idx < limit]
-        if valid_idx.numel() == 0:
-            return
-
-        grad_slice = grad[valid_idx, :2]
-        contrib = torch.norm(grad_slice, dim=-1, keepdim=True)
-        self.xyz_gradient_accum[valid_idx] += contrib
-        self.denom[valid_idx] += 1
+        self.xyz_gradient_accum[update_filter] += torch.norm(viewspace_point_tensor.grad[update_filter,:2], dim=-1, keepdim=True)
+        self.denom[update_filter] += 1
