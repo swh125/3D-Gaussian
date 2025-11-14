@@ -110,7 +110,16 @@ class GaussianModel:
     
     @property
     def get_rotation(self):
-        return self.rotation_activation(self._rotation)
+        # Handle empty rotation tensor
+        if self._rotation.shape[0] == 0:
+            return self._rotation
+        # Ensure rotation has correct shape (N, 4) for normalize
+        if len(self._rotation.shape) == 1:
+            # If rotation is 1D, reshape to (N, 4) - this shouldn't happen normally
+            # but handle it gracefully
+            return self._rotation
+        # Normalize along dim=1 (quaternion dimension)
+        return self.rotation_activation(self._rotation, dim=1)
     
     @property
     def get_xyz(self):
@@ -343,12 +352,14 @@ class GaussianModel:
             
             # Handle empty parameters - create empty tensor but keep the key
             if param.shape[0] == 0:
-                # Create an empty parameter with the same shape (except first dimension)
+                # Create an empty parameter with the same shape (preserve all dimensions except first)
+                # This is important for multi-dimensional tensors like rotation (N, 4)
                 if len(param.shape) > 1:
                     empty_shape = (0,) + param.shape[1:]
                 else:
                     empty_shape = (0,)
-                empty_param = nn.Parameter(torch.empty(empty_shape, dtype=param.dtype, device=param.device).requires_grad_(True))
+                # Use zeros instead of empty to ensure proper initialization
+                empty_param = nn.Parameter(torch.zeros(empty_shape, dtype=param.dtype, device=param.device).requires_grad_(True))
                 group["params"][0] = empty_param
                 optimizable_tensors[group_name] = empty_param
                 continue
