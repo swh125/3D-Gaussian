@@ -132,7 +132,9 @@ def training(dataset, opt, pipe, testing_iterations, saving_iterations, checkpoi
             # Densification
             if iteration < opt.densify_until_iter:
                 # Keep track of max radii in image-space for pruning
-                gaussians.max_radii2D[visibility_filter] = torch.max(gaussians.max_radii2D[visibility_filter], radii[visibility_filter])
+                # Only update if visibility_filter is not empty and matches max_radii2D shape
+                if visibility_filter.numel() > 0 and visibility_filter.shape[0] == gaussians.max_radii2D.shape[0]:
+                    gaussians.max_radii2D[visibility_filter] = torch.max(gaussians.max_radii2D[visibility_filter], radii[visibility_filter])
                 gaussians.add_densification_stats(viewspace_point_tensor, visibility_filter)
 
                 if iteration > opt.densify_from_iter and iteration % opt.densification_interval == 0:
