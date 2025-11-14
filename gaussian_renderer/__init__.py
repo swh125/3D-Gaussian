@@ -23,7 +23,11 @@ def render(viewpoint_camera, pc : GaussianModel, pipe, bg_color : torch.Tensor, 
     """
  
     # Create zero tensor. We will use it to make pytorch return gradients of the 2D (screen-space) means
-    screenspace_points = torch.zeros_like(pc.get_xyz, dtype=pc.get_xyz.dtype, requires_grad=True, device="cuda") + 0
+    # Ensure get_xyz is on CUDA before creating screenspace_points
+    xyz = pc.get_xyz
+    if xyz.device.type != "cuda":
+        xyz = xyz.cuda()
+    screenspace_points = torch.zeros_like(xyz, dtype=xyz.dtype, requires_grad=True, device="cuda") + 0
     try:
         screenspace_points.retain_grad()
     except:
@@ -33,6 +37,17 @@ def render(viewpoint_camera, pc : GaussianModel, pipe, bg_color : torch.Tensor, 
     tanfovx = math.tan(viewpoint_camera.FoVx * 0.5)
     tanfovy = math.tan(viewpoint_camera.FoVy * 0.5)
 
+    # Ensure all camera matrices are on CUDA
+    world_view_transform = viewpoint_camera.world_view_transform
+    full_proj_transform = viewpoint_camera.full_proj_transform
+    camera_center = viewpoint_camera.camera_center
+    if world_view_transform.device.type != "cuda":
+        world_view_transform = world_view_transform.cuda()
+    if full_proj_transform.device.type != "cuda":
+        full_proj_transform = full_proj_transform.cuda()
+    if camera_center.device.type != "cuda":
+        camera_center = camera_center.cuda()
+
     raster_settings = GaussianRasterizationSettings(
         image_height=int(viewpoint_camera.image_height),
         image_width=int(viewpoint_camera.image_width),
@@ -40,19 +55,22 @@ def render(viewpoint_camera, pc : GaussianModel, pipe, bg_color : torch.Tensor, 
         tanfovy=tanfovy,
         bg=bg_color,
         scale_modifier=scaling_modifier,
-        viewmatrix=viewpoint_camera.world_view_transform,
-        projmatrix=viewpoint_camera.full_proj_transform,
+        viewmatrix=world_view_transform,
+        projmatrix=full_proj_transform,
         sh_degree=pc.active_sh_degree,
-        campos=viewpoint_camera.camera_center,
+        campos=camera_center,
         prefiltered=False,
         debug=pipe.debug
     )
 
     rasterizer = GaussianRasterizer(raster_settings=raster_settings)
 
-    means3D = pc.get_xyz
+    means3D = xyz  # Use the CUDA version
     means2D = screenspace_points
     opacity = pc.get_opacity
+    # Ensure opacity is on CUDA
+    if opacity.device.type != "cuda":
+        opacity = opacity.cuda()
     if filtered_mask is not None:
         new_opacity = opacity.detach().clone()
         new_opacity[filtered_mask, :] = 0
@@ -65,9 +83,15 @@ def render(viewpoint_camera, pc : GaussianModel, pipe, bg_color : torch.Tensor, 
     cov3D_precomp = None
     if pipe.compute_cov3D_python:
         cov3D_precomp = pc.get_covariance(scaling_modifier)
+        if cov3D_precomp.device.type != "cuda":
+            cov3D_precomp = cov3D_precomp.cuda()
     else:
         scales = pc.get_scaling
         rotations = pc.get_rotation
+        if scales.device.type != "cuda":
+            scales = scales.cuda()
+        if rotations.device.type != "cuda":
+            rotations = rotations.cuda()
 
     # If precomputed colors are provided, use them. Otherwise, if it is desired to precompute colors
     # from SHs in Python, do it. If not, then SH -> RGB conversion will be done by rasterizer.
@@ -76,14 +100,22 @@ def render(viewpoint_camera, pc : GaussianModel, pipe, bg_color : torch.Tensor, 
     if override_color is None:
         if pipe.convert_SHs_python:
             shs_view = pc.get_features.transpose(1, 2).view(-1, 3, (pc.max_sh_degree+1)**2)
-            dir_pp = (pc.get_xyz - viewpoint_camera.camera_center.repeat(pc.get_features.shape[0], 1))
+            if shs_view.device.type != "cuda":
+                shs_view = shs_view.cuda()
+            dir_pp = (xyz - camera_center.repeat(pc.get_features.shape[0], 1))
             dir_pp_normalized = dir_pp/dir_pp.norm(dim=1, keepdim=True)
             sh2rgb = eval_sh(pc.active_sh_degree, shs_view, dir_pp_normalized)
             colors_precomp = torch.clamp_min(sh2rgb + 0.5, 0.0)
+            if colors_precomp.device.type != "cuda":
+                colors_precomp = colors_precomp.cuda()
         else:
             shs = pc.get_features
+            if shs.device.type != "cuda":
+                shs = shs.cuda()
     else:
         colors_precomp = override_color
+        if colors_precomp.device.type != "cuda":
+            colors_precomp = colors_precomp.cuda()
 
     # Rasterize visible Gaussians to image, obtain their radii (on screen). 
     rendered_image, radii = rasterizer(
