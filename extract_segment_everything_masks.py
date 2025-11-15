@@ -227,7 +227,7 @@ if __name__ == "__main__":
 
         if not processed_masks:
             torch.save(torch.zeros((0, *original_hw), dtype=torch.bool), os.path.join(output_dir, f"{stem}.pt"))
-                continue
+            continue
 
         masks_tensor = torch.stack([m.cpu() for m in processed_masks], dim=0)
 
