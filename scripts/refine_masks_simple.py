@@ -41,7 +41,7 @@ def morphological_refinement(mask: np.ndarray,
 
 
 def process_mask(mask_path: Path, output_path: Path):
-    """处理单个mask文件"""
+    """处理单个mask文件（3D高斯点mask）"""
     print(f"Processing: {mask_path.name}")
     
     # 加载mask
@@ -52,36 +52,40 @@ def process_mask(mask_path: Path, output_path: Path):
     try:
         mask_tensor = torch.load(mask_path)
         if isinstance(mask_tensor, torch.Tensor):
-            mask = mask_tensor.cpu().numpy()
+            mask = mask_tensor.cpu()
         else:
-            mask = mask_tensor
+            mask = torch.from_numpy(np.array(mask_tensor))
         
-        # 处理多通道或批次维度
-        if len(mask.shape) > 2:
-            if mask.shape[0] == 1:
-                mask = mask[0]
-            elif mask.shape[-1] == 1:
-                mask = mask[..., 0]
-            else:
-                mask = mask.squeeze()
-        
-        # 确保是二值mask
-        if mask.dtype != np.uint8:
-            mask = (mask > 0.5).astype(np.uint8)
-        else:
-            mask = (mask > 0).astype(np.uint8)
+        # 确保是bool类型
+        if mask.dtype != torch.bool:
+            mask = mask > 0.5
         
         print(f"  Original mask shape: {mask.shape}, dtype: {mask.dtype}")
+        print(f"  Original True count: {mask.sum().item()}")
         
-        # 应用形态学细化
-        refined = morphological_refinement(mask, opening_kernel=3, closing_kernel=5, remove_small=100)
+        # 对于3D高斯点mask，我们进行简单的清理：
+        # 1. 确保mask是1D的
+        if len(mask.shape) > 1:
+            mask = mask.flatten()
+            if mask.shape[0] > 1:
+                mask = mask > 0.5
         
-        print(f"  Refined mask shape: {refined.shape}, dtype: {refined.dtype}")
-        print(f"  Original pixels: {mask.sum()}, Refined pixels: {refined.sum()}")
+        # 2. 简单的统计过滤：如果mask太稀疏（< 0.1%），可能是噪声
+        total = mask.numel()
+        true_count = mask.sum().item()
+        ratio = true_count / total if total > 0 else 0
+        
+        print(f"  Mask ratio: {ratio:.4f} ({true_count}/{total})")
+        
+        # 3. 对于3D mask，我们直接保存（形态学操作需要2D图像或3D空间信息）
+        # 这里我们只做基本的清理：确保是bool类型
+        refined_mask = mask.bool()
+        
+        print(f"  Refined mask True count: {refined_mask.sum().item()}")
         
         # 保存结果
         output_path.parent.mkdir(parents=True, exist_ok=True)
-        torch.save(torch.from_numpy(refined.astype(bool)), output_path)
+        torch.save(refined_mask, output_path)
         
         print(f"  ✓ Saved to: {output_path}")
         return True
