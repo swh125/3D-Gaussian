@@ -129,7 +129,7 @@ def refine_3d_mask_via_2d(mask_3d_path: str, model_path: str, iteration: int,
         # 渲染2D mask
         mask_res = render_mask(cam, gaussians, pipeline, 
                                background, precomputed_mask=mask_3d_float)
-        mask_2d = mask_res["mask"][0].cpu().numpy()  # [H, W, 3] -> [H, W]
+        mask_2d = mask_res["mask"][0].detach().cpu().numpy()  # [H, W, 3] -> [H, W]
         if len(mask_2d.shape) == 3:
             mask_2d = mask_2d[:, :, 0]  # 取第一个通道
         
@@ -146,7 +146,7 @@ def refine_3d_mask_via_2d(mask_3d_path: str, model_path: str, iteration: int,
         # 重新渲染原始mask，看哪些点可见
         mask_res_original = render_mask(cam, gaussians, pipeline, 
                                         background, precomputed_mask=mask_3d_float)
-        mask_2d_original = mask_res_original["mask"][0].cpu().numpy()
+        mask_2d_original = mask_res_original["mask"][0].detach().cpu().numpy()
         if len(mask_2d_original.shape) == 3:
             mask_2d_original = mask_2d_original[:, :, 0]
         
