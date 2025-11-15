@@ -19,12 +19,16 @@ import os
 
 def get_data_path_from_env_or_model():
     """从环境变量或模型路径自动获取数据路径"""
-    # 1. 从环境变量获取
+    # 1. 从环境变量获取（最优先）
     output_dir = os.environ.get('OUTPUT_DIR')
-    if output_dir and Path(output_dir).exists():
-        return output_dir
+    if output_dir:
+        output_dir = Path(output_dir)
+        if output_dir.exists() and (output_dir / "images").exists():
+            return str(output_dir)
+        elif output_dir.exists():
+            print(f"警告: OUTPUT_DIR存在但缺少images目录: {output_dir}")
     
-    # 2. 从最新的模型路径的cfg_args读取
+    # 2. 从最新的模型路径的cfg_args读取source_path
     output_base = Path('./output')
     if output_base.exists():
         model_dirs = sorted([d for d in output_base.iterdir() if d.is_dir()], 
@@ -35,16 +39,30 @@ def get_data_path_from_env_or_model():
                 try:
                     with open(cfg_file, 'r') as f:
                         content = f.read()
-                        # 查找source_path
+                        # 查找source_path（这是OUTPUT_DIR）
                         for line in content.split('\n'):
                             if 'source_path' in line:
+                                # 尝试多种解析方式
+                                # 格式可能是: source_path='/path/to/data'
+                                # 或: source_path="/path/to/data"
+                                # 或: 'source_path': '/path/to/data'
+                                import re
+                                # 匹配 source_path='...' 或 source_path="..."
+                                match = re.search(r"source_path\s*[=:]\s*['\"]([^'\"]+)['\"]", line)
+                                if match:
+                                    path = match.group(1)
+                                    path_obj = Path(path)
+                                    if path_obj.exists() and (path_obj / "images").exists():
+                                        return path
+                                # 如果没有匹配到，尝试简单分割
                                 parts = line.strip().split()
                                 for i, part in enumerate(parts):
                                     if 'source_path' in part and i + 1 < len(parts):
                                         path = parts[i + 1].strip("'\"")
-                                        if Path(path).exists():
+                                        path_obj = Path(path)
+                                        if path_obj.exists() and (path_obj / "images").exists():
                                             return path
-                except:
+                except Exception as e:
                     pass
     
     return None
