@@ -11,6 +11,10 @@ MODEL_OPT="${MODEL_OPT:-./output/video_scene_optimized_$(date +%Y%m%d_%H%M%S)}"
 ITERATIONS="${ITERATIONS:-30000}"
 TEST_LAST="${TEST_LAST:-40}"  # Last 40 frames for test (295 train, 40 test, ratio ~7.4:1)
 
+# Finetune configuration (optional)
+FINETUNE_FROM="${FINETUNE_FROM:-}"                          # Path to checkpoint for finetuning (empty = train from scratch)
+FINETUNE_LR_SCALE="${FINETUNE_LR_SCALE:-0.1}"              # Learning rate scale for finetuning (default: 0.1)
+
 # Optimized hyperparameters
 POSITION_LR_INIT_OPT="${POSITION_LR_INIT_OPT:-0.0002}"      # Slightly higher
 POSITION_LR_FINAL_OPT="${POSITION_LR_FINAL_OPT:-0.0000016}"
@@ -30,6 +34,11 @@ echo "Baseline model  : ${MODEL_BASELINE}"
 echo "Optimized model : ${MODEL_OPT}"
 echo "Iterations      : ${ITERATIONS}"
 echo "Train/Test split: 295 / 40 (ratio ~7.4:1)"
+if [ -n "${FINETUNE_FROM}" ]; then
+  echo "Finetune from   : ${FINETUNE_FROM} (LR scale: ${FINETUNE_LR_SCALE})"
+else
+  echo "Training mode   : From scratch"
+fi
 echo ""
 
 # Step 1: Train optimized model
@@ -49,7 +58,8 @@ python train_scene_optimized.py \
   --densify_from_iter "${DENSIFY_FROM_ITER_OPT}" \
   --densify_until_iter "${DENSIFY_UNTIL_ITER_OPT}" \
   --densify_grad_threshold "${DENSIFY_GRAD_THRESHOLD_OPT}" \
-  --save_iterations "${ITERATIONS}"
+  --save_iterations "${ITERATIONS}" \
+  $([ -n "${FINETUNE_FROM}" ] && echo "--finetune_from ${FINETUNE_FROM} --finetune_lr_scale ${FINETUNE_LR_SCALE}" || echo "")
 
 echo ""
 echo "[2/4] Rendering test set..."
