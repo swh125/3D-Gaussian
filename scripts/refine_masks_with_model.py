@@ -105,8 +105,8 @@ def refine_3d_mask_via_2d(mask_3d_path: str, model_path: str, iteration: int,
     gaussians = GaussianModel(dataset.sh_degree)
     scene = Scene(dataset, gaussians, load_iteration=iteration, shuffle=False)
     
-    # 应用原始mask
-    gaussians.segment(mask_3d.cuda())
+    # 应用原始mask（segment需要bool类型）
+    gaussians.segment(mask_3d.bool().cuda())
     
     # 获取训练相机（用于优化）
     train_cameras = scene.getTrainCameras()
@@ -122,10 +122,13 @@ def refine_3d_mask_via_2d(mask_3d_path: str, model_path: str, iteration: int,
     background = torch.zeros(3, device="cuda")
     
     # 对每个视角渲染mask并进行形态学细化
+    # 确保mask是float类型（render_mask需要float，不是bool）
+    mask_3d_float = mask_3d.float().cuda()
+    
     for cam in tqdm(train_cameras, desc="Rendering and refining 2D masks"):
         # 渲染2D mask
         mask_res = render_mask(cam, gaussians, pipeline, 
-                               background, precomputed_mask=mask_3d.cuda())
+                               background, precomputed_mask=mask_3d_float)
         mask_2d = mask_res["mask"][0].cpu().numpy()  # [H, W, 3] -> [H, W]
         if len(mask_2d.shape) == 3:
             mask_2d = mask_2d[:, :, 0]  # 取第一个通道
@@ -142,7 +145,7 @@ def refine_3d_mask_via_2d(mask_3d_path: str, model_path: str, iteration: int,
         
         # 重新渲染原始mask，看哪些点可见
         mask_res_original = render_mask(cam, gaussians, pipeline, 
-                                        background, precomputed_mask=mask_3d.cuda())
+                                        background, precomputed_mask=mask_3d_float)
         mask_2d_original = mask_res_original["mask"][0].cpu().numpy()
         if len(mask_2d_original.shape) == 3:
             mask_2d_original = mask_2d_original[:, :, 0]
