@@ -126,7 +126,13 @@ def render_set_optimized(model_path, name, iteration, views, gaussians, pipeline
         render_func = render
 
     for idx, view in enumerate(tqdm(views, desc="Rendering progress")):
-        res = render_func(view, gaussians, pipeline, background)
+        # 对于seg目标，彩色渲染时只渲染mask区域
+        if target == 'seg' and precomputed_mask is not None:
+            # 使用filtered_mask参数，只渲染mask区域的Gaussian
+            filtered_mask = ~(precomputed_mask.bool() if precomputed_mask.dtype == torch.bool else precomputed_mask > 0.5)
+            res = render_func(view, gaussians, pipeline, background, filtered_mask=filtered_mask)
+        else:
+            res = render_func(view, gaussians, pipeline, background)
 
         if target == 'seg':
             assert precomputed_mask is not None, 'Rendering 2D segmentation mask requires a precomputed mask.'
