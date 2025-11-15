@@ -53,7 +53,12 @@ def render_set(model_path, name, iteration, views, gaussians, pipeline, backgrou
 
         if target == 'seg':
             assert precomputed_mask is not None and 'Rendering 2D segmentation mask requires a precomputed mask.'
-            mask_res = render_mask(view, gaussians, pipeline, background, precomputed_mask=precomputed_mask)
+            # For render_mask, precomputed_mask needs to be float type (used as colors_precomp)
+            # Convert bool mask to float if needed
+            mask_for_render = precomputed_mask
+            if isinstance(mask_for_render, torch.Tensor) and mask_for_render.dtype == torch.bool:
+                mask_for_render = mask_for_render.float()
+            mask_res = render_mask(view, gaussians, pipeline, background, precomputed_mask=mask_for_render)
 
         rendering = res["render"]
         gt = view.original_image[0:3, :, :]
