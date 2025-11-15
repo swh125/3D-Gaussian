@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 """
-处理optimized zip中的mask，去除光晕
-使用更强的形态学操作
+处理optimized zip中的renders和masks，去除光晕
+使用更强的形态学操作处理mask，然后用mask清理renders边缘的光晕
 """
 
 import sys
@@ -61,6 +61,37 @@ def refine_mask_strong(mask_path: Path, opening_kernel: int = 3, closing_kernel:
     return mask_binary
 
 
+def refine_render_with_mask(render_path: Path, mask_binary: np.ndarray):
+    """
+    使用处理后的mask清理render边缘的光晕
+    
+    Args:
+        render_path: render文件路径
+        mask_binary: 处理后的二值mask (H, W), 0或255
+    """
+    # 加载render
+    render_img = Image.open(render_path)
+    if render_img.mode != 'RGB':
+        render_img = render_img.convert('RGB')
+    render_np = np.array(render_img)
+    
+    # 检查尺寸是否匹配
+    if render_np.shape[:2] != mask_binary.shape:
+        # 调整mask尺寸以匹配render
+        mask_img = Image.fromarray(mask_binary)
+        mask_img = mask_img.resize((render_np.shape[1], render_np.shape[0]), Image.NEAREST)
+        mask_binary = np.array(mask_img)
+    
+    # 将mask转换为0-1的布尔mask
+    mask_bool = (mask_binary > 127).astype(bool)
+    
+    # 在mask区域外（光晕区域）设为黑色
+    render_cleaned = render_np.copy()
+    render_cleaned[~mask_bool] = [0, 0, 0]
+    
+    return render_cleaned
+
+
 def process_zip_masks(zip_path: Path, output_zip_path: Path = None,
                      opening_kernel: int = 3, closing_kernel: int = 5, iterations: int = 2):
     """
@@ -104,27 +135,57 @@ def process_zip_masks(zip_path: Path, output_zip_path: Path = None,
         
         print(f"\n🔍 找到 {len(mask_dirs)} 个mask目录")
         
-        # 处理每个mask目录
+        # 处理每个mask目录，同时处理对应的renders
         total_masks = 0
+        total_renders = 0
         for mask_dir in mask_dirs:
             mask_files = sorted(mask_dir.glob("*.png"))
             if len(mask_files) == 0:
                 continue
             
+            # 找到对应的renders目录
+            renders_dir = mask_dir.parent / "renders"
+            if not renders_dir.exists():
+                print(f"\n📁 处理目录: {mask_dir}")
+                print(f"   ⚠️  未找到对应的renders目录: {renders_dir}")
+                # 只处理masks
+                for mask_path in tqdm(mask_files, desc="  处理masks"):
+                    try:
+                        mask_refined = refine_mask_strong(
+                            mask_path, 
+                            opening_kernel=opening_kernel,
+                            closing_kernel=closing_kernel,
+                            iterations=iterations
+                        )
+                        Image.fromarray(mask_refined).save(mask_path)
+                        total_masks += 1
+                    except Exception as e:
+                        print(f"   ⚠️  处理失败 {mask_path.name}: {e}")
+                continue
+            
             print(f"\n📁 处理目录: {mask_dir}")
             print(f"   找到 {len(mask_files)} 个mask文件")
+            print(f"   对应的renders目录: {renders_dir}")
             
-            for mask_path in tqdm(mask_files, desc="  处理masks"):
+            # 同时处理masks和renders
+            for mask_path in tqdm(mask_files, desc="  处理masks和renders"):
                 try:
+                    # 处理mask
                     mask_refined = refine_mask_strong(
                         mask_path, 
                         opening_kernel=opening_kernel,
                         closing_kernel=closing_kernel,
                         iterations=iterations
                     )
-                    # 覆盖原文件
                     Image.fromarray(mask_refined).save(mask_path)
                     total_masks += 1
+                    
+                    # 处理对应的render
+                    render_path = renders_dir / mask_path.name
+                    if render_path.exists():
+                        render_cleaned = refine_render_with_mask(render_path, mask_refined)
+                        Image.fromarray(render_cleaned).save(render_path)
+                        total_renders += 1
                 except Exception as e:
                     print(f"   ⚠️  处理失败 {mask_path.name}: {e}")
         
@@ -138,6 +199,7 @@ def process_zip_masks(zip_path: Path, output_zip_path: Path = None,
         
         print(f"\n✓ 完成！")
         print(f"   处理了 {total_masks} 个mask文件")
+        print(f"   处理了 {total_renders} 个render文件")
         print(f"   输出文件: {output_zip_path}")
         
     finally:
@@ -148,7 +210,7 @@ def process_zip_masks(zip_path: Path, output_zip_path: Path = None,
 
 
 def main():
-    parser = argparse.ArgumentParser(description="处理optimized zip中的mask，去除光晕")
+    parser = argparse.ArgumentParser(description="处理optimized zip中的renders和masks，去除光晕")
     parser.add_argument("--zip_path", type=str, required=True,
                        help="原始zip文件路径（如 ~/Desktop/items_optimized_gui_render.zip）")
     parser.add_argument("--output_zip", type=str, default=None,
