@@ -279,8 +279,7 @@ if __name__ == "__main__":
     parser.add_argument('--target', type=str, default='seg', choices=['seg', 'scene', 'feature'])
     parser.add_argument('--precomputed_mask', type=str, default=None)
     parser.add_argument('--no_morphology', action='store_true', help='禁用形态学操作')
-    parser.add_argument('--eval', action='store_true')
-    parser.add_argument('--test_last_n', type=int, default=None)
+    # --eval 和 --test_last_n 已经在 ModelParams 中定义了，不需要重复添加
     
     args = get_combined_args(parser)
     
