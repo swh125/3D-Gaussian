@@ -88,6 +88,14 @@ def refine_3d_mask_via_2d(mask_3d_path: str, model_path: str, iteration: int,
     # 设置 model_path
     args_dict['model_path'] = model_path
     
+    # 确保 PipelineParams 的所有属性都有默认值
+    if 'convert_SHs_python' not in args_dict:
+        args_dict['convert_SHs_python'] = False
+    if 'compute_cov3D_python' not in args_dict:
+        args_dict['compute_cov3D_python'] = False
+    if 'debug' not in args_dict:
+        args_dict['debug'] = False
+    
     # 创建 Namespace 对象
     args = Namespace(**args_dict)
     
