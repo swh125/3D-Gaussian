@@ -161,13 +161,16 @@ def refine_3d_mask_via_2d(mask_3d_path: str, model_path: str, iteration: int,
     # 由于精确的反向投影比较复杂，这里提供一个基于统计的简化版本
     print("Applying simplified 3D refinement based on spatial statistics...")
     
-    # 获取高斯点位置
+    # 注意：gaussians.segment()已经过滤了高斯点，所以现在gaussians.get_xyz的大小
+    # 等于mask中True的数量，而不是原始的高斯点数量
+    # 我们需要在segment之前保存原始位置，或者直接使用segment后的点
+    # 由于已经segment过了，当前所有点都是mask中的点，所以不需要再过滤
     gaussians_xyz = gaussians.get_xyz.cpu()
-    mask_3d_np = mask_3d.numpy()
     
-    if mask_3d.sum().item() > 0:
+    if gaussians_xyz.shape[0] > 0:
         # 基于空间距离的平滑：移除孤立点
-        xyz_masked = gaussians_xyz[mask_3d_np]
+        # 注意：segment后，所有点都是mask中的点，所以直接使用所有点
+        xyz_masked = gaussians_xyz
         
         if len(xyz_masked) > 10:  # 需要足够的点来计算邻域
             try:
@@ -181,11 +184,15 @@ def refine_3d_mask_via_2d(mask_3d_path: str, model_path: str, iteration: int,
                 
                 # 标记孤立点
                 isolated = mean_dist > threshold
-                isolated_indices = np.where(mask_3d_np)[0][isolated]
+                
+                # 由于已经segment过了，我们需要重建完整的mask
+                # 找到原始mask中对应的索引
+                original_mask_indices = torch.where(mask_3d)[0].cpu().numpy()
+                isolated_original_indices = original_mask_indices[isolated]
                 
                 # 移除孤立点
                 refined_mask_3d = mask_3d.clone()
-                refined_mask_3d[isolated_indices] = False
+                refined_mask_3d[isolated_original_indices] = False
                 
                 print(f"Removed {isolated.sum()} isolated points")
                 print(f"Refined mask True count: {refined_mask_3d.sum().item()}")
