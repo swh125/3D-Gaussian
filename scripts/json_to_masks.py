@@ -146,13 +146,16 @@ def main():
     # 获取shapes
     shapes = json_data.get('shapes', [])
     
+    # 从JSON文件名提取帧号（如 frame_00303.json -> frame_00303）
+    frame_name = json_path.stem  # 去掉扩展名，得到 frame_00303
+    
     # 为每个物体生成mask
     for label in target_labels:
         print(f"生成 {label} 的mask...")
         mask = create_mask_from_shapes(shapes, image_size, label_name=label)
         
-        # 保存mask
-        mask_path = output_dir / f"{label}.png"
+        # 保存mask，包含帧号：frame_00303_book.png
+        mask_path = output_dir / f"{frame_name}_{label}.png"
         mask_img = Image.fromarray(mask)
         mask_img.save(mask_path)
         print(f"  ✓ 保存到: {mask_path}")
