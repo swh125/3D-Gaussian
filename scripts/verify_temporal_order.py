@@ -104,7 +104,35 @@ def verify_order(data_path=None, test_last_n=40):
     print(f"   - 最后一张: {image_files[-1].name}")
     print()
     
-    # 2. 检查训练/测试集划分
+    # 2. 检查COLMAP sparse重建结果
+    sparse_dir = data_path / "sparse" / "0"
+    images_bin = sparse_dir / "images.bin"
+    images_txt = sparse_dir / "images.txt"
+    
+    print("2. COLMAP Sparse重建检查")
+    if images_bin.exists() or images_txt.exists():
+        # 尝试读取COLMAP重建的相机数量
+        try:
+            from scene.colmap_loader import read_extrinsics_binary, read_extrinsics_text
+            if images_bin.exists():
+                cam_extrinsics = read_extrinsics_binary(str(images_bin))
+            else:
+                cam_extrinsics = read_extrinsics_text(str(images_txt))
+            colmap_camera_count = len(cam_extrinsics)
+            print(f"   - COLMAP重建的相机数: {colmap_camera_count}")
+            print(f"   - 原始图片数: {total_images}")
+            if colmap_camera_count < total_images * 0.1:
+                print(f"   ⚠️  警告: COLMAP只重建了 {colmap_camera_count}/{total_images} 个相机")
+                print(f"      这可能导致训练数据不足，建议重新运行COLMAP处理")
+        except Exception as e:
+            print(f"   ⚠️  无法读取COLMAP文件: {e}")
+    else:
+        print(f"   ❌ 错误: COLMAP sparse目录不存在: {sparse_dir}")
+        print(f"      请先运行COLMAP处理（ns-process-data 或手动COLMAP）")
+        return False
+    print()
+    
+    # 3. 检查训练/测试集划分
     parser = arg_parse.ArgumentParser()
     model = ModelParams(parser, sentinel=True)
     args = parser.parse_args(['-s', str(data_path)])
@@ -126,17 +154,21 @@ def verify_order(data_path=None, test_last_n=40):
     test_count = len(scene_info.test_cameras)
     total_loaded = train_count + test_count
     
-    print(f"2. 训练/测试集划分")
+    print(f"3. 训练/测试集划分")
     print(f"   - 总加载数: {total_loaded}")
     print(f"   - 训练集: {train_count} 张")
     print(f"   - 测试集: {test_count} 张")
+    if total_loaded < total_images * 0.1:
+        print(f"   ⚠️  警告: 只加载了 {total_loaded}/{total_images} 张图片")
+        print(f"      这是因为COLMAP只重建了 {total_loaded} 个相机位姿")
+        print(f"      建议检查COLMAP处理是否成功")
     print()
     
-    # 3. 验证划分是否正确（最后N个作为测试集）
+    # 4. 验证划分是否正确（最后N个作为测试集）
     expected_train = total_loaded - test_last_n
     expected_test = test_last_n
     
-    print(f"3. 验证划分逻辑")
+    print(f"4. 验证划分逻辑")
     print(f"   - 期望: 前 {expected_train} 张训练，后 {expected_test} 张测试")
     print(f"   - 实际: 前 {train_count} 张训练，后 {test_count} 张测试")
     
@@ -147,8 +179,8 @@ def verify_order(data_path=None, test_last_n=40):
         return False
     print()
     
-    # 4. 验证训练集和测试集的图片顺序
-    print(f"4. 验证图片顺序")
+    # 5. 验证训练集和测试集的图片顺序
+    print(f"5. 验证图片顺序")
     
     # 检查训练集：应该是前N张
     train_image_names = [cam.image_name for cam in scene_info.train_cameras]
@@ -186,8 +218,8 @@ def verify_order(data_path=None, test_last_n=40):
         return False
     print()
     
-    # 5. 验证训练集和测试集的连续性
-    print(f"5. 验证训练/测试集连续性")
+    # 6. 验证训练集和测试集的连续性
+    print(f"6. 验证训练/测试集连续性")
     last_train_name = train_image_names[-1] if train_image_names else None
     first_test_name = test_image_names[0] if test_image_names else None
     

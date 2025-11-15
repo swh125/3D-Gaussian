@@ -21,7 +21,7 @@ from utils.general_utils import safe_state
 from argparse import ArgumentParser
 from arguments import ModelParams, PipelineParams, get_combined_args
 
-def render_set(model_path, name, iteration, views, gaussians, pipeline, background, target, precomputed_mask = None):
+def render_set(model_path, name, iteration, views, gaussians, pipeline, background, target, precomputed_mask = None, apply_morphology = True, opening_kernel = 2, closing_kernel = 3):
     """
     Render a set of views (train or test).
     

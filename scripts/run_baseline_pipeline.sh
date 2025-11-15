@@ -175,6 +175,115 @@ if [[ -d "${OUTPUT_DIR}/colmap/sparse" ]] && [[ ! -d "${OUTPUT_DIR}/sparse" ]]; 
   ln -s colmap/sparse "${OUTPUT_DIR}/sparse"
 fi
 
+# Check COLMAP reconstruction quality
+echo "Checking COLMAP reconstruction quality..."
+TOTAL_IMAGES=$(find "${OUTPUT_DIR}/images" -type f \( -name "*.jpg" -o -name "*.png" -o -name "*.jpeg" \) 2>/dev/null | wc -l)
+if [[ -f "${OUTPUT_DIR}/sparse/0/images.bin" ]]; then
+  COLMAP_COUNT=$(python3 -c "
+import sys
+sys.path.insert(0, '.')
+try:
+    from scene.colmap_loader import read_extrinsics_binary
+    images = read_extrinsics_binary('${OUTPUT_DIR}/sparse/0/images.bin')
+    print(len(images))
+except:
+    print(0)
+" 2>/dev/null || echo "0")
+elif [[ -f "${OUTPUT_DIR}/sparse/0/images.txt" ]]; then
+  COLMAP_COUNT=$(grep -v "^#" "${OUTPUT_DIR}/sparse/0/images.txt" | grep -v "^$" | wc -l)
+else
+  COLMAP_COUNT=0
+fi
+
+echo "  - 原始图片数: ${TOTAL_IMAGES}"
+echo "  - COLMAP重建数: ${COLMAP_COUNT}"
+
+# If reconstruction is poor (< 10% of images), retry with better parameters
+if [[ "${COLMAP_COUNT}" -lt $((TOTAL_IMAGES / 10)) ]] && [[ "${COLMAP_COUNT}" -lt 50 ]] && [[ "${TOTAL_IMAGES}" -gt 50 ]]; then
+  echo "⚠️  警告: COLMAP只重建了 ${COLMAP_COUNT}/${TOTAL_IMAGES} 个相机，重建质量不足"
+  echo "正在使用更宽松的参数重新运行COLMAP..."
+  
+  # Remove old sparse reconstruction
+  rm -rf "${OUTPUT_DIR}/sparse"
+  rm -rf "${OUTPUT_DIR}/colmap/sparse"
+  rm -f "${OUTPUT_DIR}/colmap/database.db"
+  
+  cd "${OUTPUT_DIR}/colmap"
+  
+  # Recreate database
+  echo "重新创建COLMAP数据库..."
+  colmap database_creator --database_path database.db || {
+    echo "Error: Failed to create COLMAP database."
+    cd - > /dev/null
+    exit 1
+  }
+  
+  # Feature extraction with more features (使用最宽松参数)
+  echo "特征提取（增加特征点数量，使用最宽松参数）..."
+  colmap feature_extractor \
+    --database_path database.db \
+    --image_path ../images \
+    --ImageReader.single_camera 1 \
+    --SiftExtraction.max_num_features 16384 \
+    --SiftExtraction.upright 0 || {
+    echo "Error: COLMAP feature extraction failed."
+    cd - > /dev/null
+    exit 1
+  }
+  
+  # Feature matching with guided matching
+  echo "特征匹配（使用引导匹配）..."
+  colmap exhaustive_matcher \
+    --database_path database.db \
+    --SiftMatching.guided_matching 1 \
+    --SiftMatching.max_ratio 0.9 || {
+    echo "Error: COLMAP matching failed."
+    cd - > /dev/null
+    exit 1
+  }
+  
+  # Mapping with relaxed parameters
+  echo "映射重建（降低三角化角度要求）..."
+  mkdir -p sparse
+  colmap mapper \
+    --database_path database.db \
+    --image_path ../images \
+    --output_path sparse \
+    --Mapper.init_min_tri_angle 2 \
+    --Mapper.multiple_models 0 || {
+    echo "Error: COLMAP mapper failed."
+    cd - > /dev/null
+    exit 1
+  }
+  
+  cd - > /dev/null
+  
+  # Recreate sparse symlink
+  if [[ -d "${OUTPUT_DIR}/colmap/sparse" ]] && [[ ! -d "${OUTPUT_DIR}/sparse" ]]; then
+    ln -s colmap/sparse "${OUTPUT_DIR}/sparse"
+  fi
+  
+  # Check again
+  if [[ -f "${OUTPUT_DIR}/sparse/0/images.bin" ]]; then
+    NEW_COLMAP_COUNT=$(python3 -c "
+import sys
+sys.path.insert(0, '.')
+try:
+    from scene.colmap_loader import read_extrinsics_binary
+    images = read_extrinsics_binary('${OUTPUT_DIR}/sparse/0/images.bin')
+    print(len(images))
+except:
+    print(0)
+" 2>/dev/null || echo "0")
+    echo "  - 重新构建后: ${NEW_COLMAP_COUNT} 个相机"
+    if [[ "${NEW_COLMAP_COUNT}" -lt $((TOTAL_IMAGES / 10)) ]]; then
+      echo "⚠️  警告: 重新构建后仍然只有 ${NEW_COLMAP_COUNT} 个相机，可能数据质量有问题"
+    else
+      echo "✓ 重新构建成功，相机数量提升到 ${NEW_COLMAP_COUNT}"
+    fi
+  fi
+fi
+
 echo "✓ Data processing complete"
 echo ""
 
