@@ -24,16 +24,26 @@ def main():
     
     # 基础路径（optimized结果在桌面）
     desktop = Path.home() / "Desktop"
-    # optimized结果路径（假设解压后或直接在zip中）
-    optimized_mask_dir = desktop / "items_optimized_gui_render" / "test" / "ours_30000" / "mask"
-    # 如果zip还没解压，先尝试解压
     zip_path = desktop / "items_optimized_gui_render.zip"
-    if zip_path.exists() and not optimized_mask_dir.exists():
-        import zipfile
-        print(f"📦 解压 {zip_path}...")
-        with zipfile.ZipFile(zip_path, 'r') as zip_ref:
-            zip_ref.extractall(desktop)
-        print(f"✓ 解压完成")
+    optimized_mask_dir = desktop / "items_optimized_gui_render" / "test" / "ours_30000" / "mask"
+    
+    # 先解压zip文件（如果存在且还没解压）
+    if zip_path.exists():
+        if not optimized_mask_dir.exists():
+            import zipfile
+            print(f"📦 解压 {zip_path}...")
+            try:
+                with zipfile.ZipFile(zip_path, 'r') as zip_ref:
+                    zip_ref.extractall(desktop)
+                print(f"✓ 解压完成到: {desktop / 'items_optimized_gui_render'}")
+            except Exception as e:
+                print(f"❌ 解压失败: {e}")
+                return
+        else:
+            print(f"✓ 已解压，使用现有目录: {optimized_mask_dir}")
+    else:
+        print(f"⚠️  Zip文件不存在: {zip_path}")
+        print(f"   尝试使用现有目录: {optimized_mask_dir}")
     
     gt_json_dir = desktop
     
