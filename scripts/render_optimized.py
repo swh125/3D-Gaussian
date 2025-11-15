@@ -129,7 +129,11 @@ def render_set_optimized(model_path, name, iteration, views, gaussians, pipeline
         # 对于seg目标，彩色渲染时只渲染mask区域
         if target == 'seg' and precomputed_mask is not None:
             # 使用filtered_mask参数，只渲染mask区域的Gaussian
-            filtered_mask = ~(precomputed_mask.bool() if precomputed_mask.dtype == torch.bool else precomputed_mask > 0.5)
+            # filtered_mask为True表示要过滤掉（不渲染），所以非mask区域设为True
+            if precomputed_mask.dtype == torch.bool:
+                filtered_mask = ~precomputed_mask
+            else:
+                filtered_mask = ~(precomputed_mask > 0.5)
             res = render_func(view, gaussians, pipeline, background, filtered_mask=filtered_mask)
         else:
             res = render_func(view, gaussians, pipeline, background)
