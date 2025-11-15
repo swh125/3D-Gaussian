@@ -189,10 +189,6 @@ def render_set_optimized(model_path, name, iteration, views, gaussians, pipeline
                     pass
             
             torchvision.utils.save_image(mask, os.path.join(mask_path, '{0:05d}'.format(idx) + ".png"))
-        elif 'feature' in target:
-            torch.save(rendering, os.path.join(render_path, '{0:05d}'.format(idx) + ".pt"))
-        elif target == 'xyz':
-            torch.save(rendering, os.path.join(render_path, 'xyz_{0:05d}'.format(idx) + ".pt"))
 
 
 def render_sets_optimized(dataset: ModelParams, iteration: int, pipeline: PipelineParams, 
