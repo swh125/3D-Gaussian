@@ -5,11 +5,34 @@
 set -euo pipefail
 
 # Configuration
-SCENE_ROOT="${SCENE_ROOT:-/home/bygpu/data/video_scene}"
-MODEL_BASELINE="${MODEL_BASELINE:-./output/video_scene_20251113_005931}"
+MODEL_BASELINE="${MODEL_BASELINE:-./output/video_scene_20251116_012233}"
 MODEL_OPT="${MODEL_OPT:-./output/video_scene_optimized_$(date +%Y%m%d_%H%M%S)}"
 ITERATIONS="${ITERATIONS:-30000}"
 TEST_LAST="${TEST_LAST:-25}"  # Last 25 frames for test (310 train, 25 test)
+
+# Auto-detect SCENE_ROOT from baseline model's cfg_args
+if [ -f "${MODEL_BASELINE}/cfg_args" ]; then
+    SCENE_ROOT=$(python3 -c "
+import re
+try:
+    with open('${MODEL_BASELINE}/cfg_args', 'r') as f:
+        content = f.read()
+        match = re.search(r\"source_path\s*=\s*['\\\"]([^'\\\"]+)['\\\"]\", content)
+        if match:
+            print(match.group(1))
+except Exception as e:
+    pass
+" 2>/dev/null)
+    if [ -z "${SCENE_ROOT}" ] || [ ! -d "${SCENE_ROOT}" ]; then
+        SCENE_ROOT="/home/bygpu/data/video_scene"
+        echo "Could not auto-detect or path invalid, using: ${SCENE_ROOT}"
+    else
+        echo "✓ Auto-detected SCENE_ROOT from baseline: ${SCENE_ROOT}"
+    fi
+else
+    SCENE_ROOT="${SCENE_ROOT:-/home/bygpu/data/video_scene}"
+    echo "Baseline cfg_args not found, using: ${SCENE_ROOT}"
+fi
 
 # Finetune configuration (optional)
 FINETUNE_FROM="${FINETUNE_FROM:-}"                          # Path to checkpoint for finetuning (empty = train from scratch)

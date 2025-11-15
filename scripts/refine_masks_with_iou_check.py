@@ -197,8 +197,8 @@ def main():
                        help="Output directory")
     parser.add_argument("--model_path", type=str, required=True,
                        help="Path to trained model")
-    parser.add_argument("--source_path", type=str, required=True,
-                       help="Path to scene data")
+    parser.add_argument("--source_path", type=str, default=None,
+                       help="Path to scene data (auto-detected from model cfg_args if not provided)")
     parser.add_argument("--iteration", type=int, default=30000,
                        help="Model iteration")
     parser.add_argument("--gt_mask_dir", type=str, default=None,
@@ -209,6 +209,29 @@ def main():
                        help="Closing kernel size")
     
     args = parser.parse_args()
+    
+    # Auto-detect source_path from model's cfg_args if not provided
+    if args.source_path is None:
+        cfg_args_path = Path(args.model_path) / "cfg_args"
+        if cfg_args_path.exists():
+            try:
+                import re
+                with open(cfg_args_path, 'r') as f:
+                    content = f.read()
+                    match = re.search(r"source_path\s*=\s*['\"]([^'\"]+)['\"]", content)
+                    if match:
+                        args.source_path = match.group(1)
+                        print(f"✓ Auto-detected source_path from model: {args.source_path}")
+                    else:
+                        raise ValueError("Could not find source_path in cfg_args")
+            except Exception as e:
+                print(f"Error auto-detecting source_path: {e}")
+                print("Please provide --source_path manually")
+                return
+        else:
+            print(f"Error: cfg_args not found at {cfg_args_path}")
+            print("Please provide --source_path manually")
+            return
     
     mask_dir = Path(args.mask_dir)
     output_dir = Path(args.output_dir)

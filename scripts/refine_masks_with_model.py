@@ -352,11 +352,38 @@ def main():
     parser.add_argument("--gt_mask_dir", type=str, default=None,
                        help="Directory containing GT masks (optional, for IoU check)")
     parser.add_argument("--source_path", type=str, default=None,
-                       help="Source path to scene data (required if --gt_mask_dir is provided)")
+                       help="Source path to scene data (auto-detected from model cfg_args if not provided)")
     parser.add_argument("--num_views", type=int, default=20,
                        help="Number of views to use for refinement")
     
     args = parser.parse_args()
+    
+    # Auto-detect source_path from model's cfg_args if not provided
+    if args.source_path is None:
+        cfg_args_path = Path(args.model_path) / "cfg_args"
+        if cfg_args_path.exists():
+            try:
+                import re
+                with open(cfg_args_path, 'r') as f:
+                    content = f.read()
+                    match = re.search(r"source_path\s*=\s*['\"]([^'\"]+)['\"]", content)
+                    if match:
+                        args.source_path = match.group(1)
+                        print(f"✓ Auto-detected source_path from model: {args.source_path}")
+                    else:
+                        raise ValueError("Could not find source_path in cfg_args")
+            except Exception as e:
+                print(f"Error auto-detecting source_path: {e}")
+                if args.gt_mask_dir:
+                    print("Error: --source_path is required when --gt_mask_dir is provided")
+                    return
+                print("Warning: source_path not found, continuing without GT mask IoU check")
+        else:
+            if args.gt_mask_dir:
+                print(f"Error: cfg_args not found at {cfg_args_path}")
+                print("Please provide --source_path manually when using --gt_mask_dir")
+                return
+            print(f"Warning: cfg_args not found at {cfg_args_path}, continuing without GT mask IoU check")
     
     MASK_FILES = [
         "book_optimized.pt",
