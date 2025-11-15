@@ -75,14 +75,21 @@ def refine_3d_mask_via_2d(mask_3d_path: str, model_path: str, iteration: int,
     model_params = ModelParams(parser, sentinel=True)
     pipeline_params = PipelineParams(parser)
     
-    # 手动设置 model_path 并解析参数
-    import sys
-    original_argv = sys.argv
-    try:
-        sys.argv = ['refine_masks_with_model.py', '--model_path', model_path]
-        args = get_combined_args(parser)
-    finally:
-        sys.argv = original_argv
+    # 手动读取配置文件并构造参数
+    cfg_file = os.path.join(model_path, "cfg_args")
+    args_dict = {}
+    if os.path.exists(cfg_file):
+        print(f"Loading config from: {cfg_file}")
+        with open(cfg_file, 'r') as f:
+            cfg_content = f.read()
+            cfg_args = eval(cfg_content)
+            args_dict = vars(cfg_args)
+    
+    # 设置 model_path
+    args_dict['model_path'] = model_path
+    
+    # 创建 Namespace 对象
+    args = Namespace(**args_dict)
     
     dataset = model_params.extract(args)
     pipeline = pipeline_params.extract(args)
