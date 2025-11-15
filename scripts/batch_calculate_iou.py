@@ -13,17 +13,28 @@ def main():
     script_dir = Path(__file__).parent
     calculate_iou_script = script_dir / "calculate_iou.py"
     
-    # 对应关系：baseline_mask -> gt_json
+    # 对应关系：optimized_mask -> gt_json
+    # 去掉 00015/311，加上 00007/303
     pairs = [
-        ("00015.png", "frame_00311.json"),
+        ("00007.png", "frame_00303.json"),
         ("00023.png", "frame_00319.json"),
         ("00031.png", "frame_00327.json"),
         ("00039.png", "frame_00335.json"),
     ]
     
-    # 基础路径（用户需要根据实际情况修改）
+    # 基础路径（optimized结果在桌面）
     desktop = Path.home() / "Desktop"
-    baseline_mask_dir = desktop / "items_baseline_render_temp" / "test" / "ours_30000" / "mask"
+    # optimized结果路径（假设解压后或直接在zip中）
+    optimized_mask_dir = desktop / "items_optimized_gui_render" / "test" / "ours_30000" / "mask"
+    # 如果zip还没解压，先尝试解压
+    zip_path = desktop / "items_optimized_gui_render.zip"
+    if zip_path.exists() and not optimized_mask_dir.exists():
+        import zipfile
+        print(f"📦 解压 {zip_path}...")
+        with zipfile.ZipFile(zip_path, 'r') as zip_ref:
+            zip_ref.extractall(desktop)
+        print(f"✓ 解压完成")
+    
     gt_json_dir = desktop
     
     print("=" * 80)
@@ -33,23 +44,23 @@ def main():
     
     results = []
     
-    for baseline_mask_name, gt_json_name in pairs:
-        baseline_mask_path = baseline_mask_dir / baseline_mask_name
+    for optimized_mask_name, gt_json_name in pairs:
+        optimized_mask_path = optimized_mask_dir / optimized_mask_name
         gt_json_path = gt_json_dir / gt_json_name
         
-        print(f"📊 计算: {baseline_mask_name} <-> {gt_json_name}")
-        print(f"   Baseline: {baseline_mask_path}")
+        print(f"📊 计算: {optimized_mask_name} <-> {gt_json_name}")
+        print(f"   Optimized: {optimized_mask_path}")
         print(f"   GT: {gt_json_path}")
         
-        if not baseline_mask_path.exists():
-            print(f"   ❌ Baseline mask不存在: {baseline_mask_path}")
-            results.append((baseline_mask_name, gt_json_name, None, "Mask文件不存在"))
+        if not optimized_mask_path.exists():
+            print(f"   ❌ Optimized mask不存在: {optimized_mask_path}")
+            results.append((optimized_mask_name, gt_json_name, None, "Mask文件不存在"))
             print()
             continue
         
         if not gt_json_path.exists():
             print(f"   ❌ GT JSON不存在: {gt_json_path}")
-            results.append((baseline_mask_name, gt_json_name, None, "JSON文件不存在"))
+            results.append((optimized_mask_name, gt_json_name, None, "JSON文件不存在"))
             print()
             continue
         
@@ -59,7 +70,7 @@ def main():
                 sys.executable,
                 str(calculate_iou_script),
                 "--json_file", str(gt_json_path),
-                "--pred_mask", str(baseline_mask_path),
+                "--pred_mask", str(optimized_mask_path),
             ]
             
             result = subprocess.run(cmd, capture_output=True, text=True, cwd=script_dir.parent)
@@ -80,15 +91,15 @@ def main():
                             pass
                 
                 print(output)
-                results.append((baseline_mask_name, gt_json_name, iou_value, "成功"))
+                results.append((optimized_mask_name, gt_json_name, iou_value, "成功"))
             else:
                 print(f"   ❌ 计算失败:")
                 print(result.stderr)
-                results.append((baseline_mask_name, gt_json_name, None, f"错误: {result.stderr[:100]}"))
+                results.append((optimized_mask_name, gt_json_name, None, f"错误: {result.stderr[:100]}"))
         
         except Exception as e:
             print(f"   ❌ 异常: {e}")
-            results.append((baseline_mask_name, gt_json_name, None, f"异常: {str(e)}"))
+            results.append((optimized_mask_name, gt_json_name, None, f"异常: {str(e)}"))
         
         print()
         print("-" * 80)
@@ -96,17 +107,17 @@ def main():
     
     # 汇总结果
     print("=" * 80)
-    print("📊 汇总结果")
+    print("📊 汇总结果 (Optimized)")
     print("=" * 80)
-    print(f"{'Baseline Mask':<20} {'GT JSON':<25} {'IoU':<15} {'状态':<20}")
+    print(f"{'Optimized Mask':<20} {'GT JSON':<25} {'IoU':<15} {'状态':<20}")
     print("-" * 80)
     
-    for baseline_mask_name, gt_json_name, iou_value, status in results:
+    for optimized_mask_name, gt_json_name, iou_value, status in results:
         if iou_value is not None:
             iou_str = f"{iou_value:.4f} ({iou_value*100:.2f}%)"
         else:
             iou_str = "N/A"
-        print(f"{baseline_mask_name:<20} {gt_json_name:<25} {iou_str:<15} {status:<20}")
+        print(f"{optimized_mask_name:<20} {gt_json_name:<25} {iou_str:<15} {status:<20}")
     
     # 计算平均IoU（只计算成功的）
     successful_ious = [r[2] for r in results if r[2] is not None]
@@ -122,4 +133,5 @@ def main():
 
 if __name__ == "__main__":
     main()
+
 
