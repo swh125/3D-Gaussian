@@ -63,6 +63,29 @@ def render_set(model_path, name, iteration, views, gaussians, pipeline, backgrou
             mask[mask < 0.5] = 0
             mask[mask != 0] = 1
             mask = mask[0, :, :]
+            
+            # 应用形态学操作去除边缘光晕和锯齿
+            # 开运算：去除边缘小噪点和光晕
+            # 闭运算：填补小洞，平滑边缘
+            try:
+                import cv2
+                import numpy as np
+                mask_np = (mask.cpu().numpy() * 255).astype(np.uint8)
+                
+                # 开运算：去除光晕（kernel=2，保守参数）
+                kernel_open = cv2.getStructuringElement(cv2.MORPH_ELLIPSE, (2, 2))
+                mask_np = cv2.morphologyEx(mask_np, cv2.MORPH_OPEN, kernel_open)
+                
+                # 闭运算：平滑边缘，去除锯齿（kernel=3，保守参数）
+                kernel_close = cv2.getStructuringElement(cv2.MORPH_ELLIPSE, (3, 3))
+                mask_np = cv2.morphologyEx(mask_np, cv2.MORPH_CLOSE, kernel_close)
+                
+                # 转换回tensor
+                mask = torch.from_numpy(mask_np.astype(np.float32) / 255.0).to(mask.device)
+            except ImportError:
+                # 如果cv2不可用，跳过形态学操作
+                pass
+            
             torchvision.utils.save_image(mask, os.path.join(mask_path, '{0:05d}'.format(idx) + ".png"))
         if target == 'seg' or target == 'scene':
             torchvision.utils.save_image(rendering, os.path.join(render_path, '{0:05d}'.format(idx) + ".png"))
