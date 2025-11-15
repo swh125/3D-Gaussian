@@ -15,7 +15,7 @@ import os
 sys.path.append(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
 from scene import Scene, GaussianModel
-from scene.gaussian_renderer import render_mask
+from gaussian_renderer import render_mask
 from utils.system_utils import searchForMaxIteration
 from utils import camera_utils, model_utils
 from argparse import ArgumentParser, Namespace
