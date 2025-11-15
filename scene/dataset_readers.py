@@ -216,8 +216,8 @@ def readColmapSceneInfo(path, images, eval, llffhold=8, need_features=False, nee
                 test_cam_infos = []
                 print(f"[split] Skipping temporal split: not enough frames (total={total}, need >4)")
         else:
-            train_cam_infos = [c for idx, c in enumerate(cam_infos) if idx % llffhold != 0]
-            test_cam_infos = [c for idx, c in enumerate(cam_infos) if idx % llffhold == 0]
+        train_cam_infos = [c for idx, c in enumerate(cam_infos) if idx % llffhold != 0]
+        test_cam_infos = [c for idx, c in enumerate(cam_infos) if idx % llffhold == 0]
     else:
         train_cam_infos = cam_infos
         test_cam_infos = []

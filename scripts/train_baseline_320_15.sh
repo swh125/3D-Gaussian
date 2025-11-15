@@ -8,7 +8,7 @@ set -euo pipefail
 SCENE_ROOT="${SCENE_ROOT:-/home/bygpu/data/video_scene}"
 MODEL_BASELINE="${MODEL_BASELINE:-./output/video_scene_baseline_320_15_$(date +%Y%m%d_%H%M%S)}"
 ITERATIONS="${ITERATIONS:-30000}"
-TEST_LAST="${TEST_LAST:-35}"  # Last 35 frames for test (300 train, 35 test, ratio ~8.6:1)
+TEST_LAST="${TEST_LAST:-40}"  # Last 40 frames for test (295 train, 40 test, ratio ~7.4:1)
 
 echo "==============================================="
 echo "Baseline 3DGS Training & Evaluation"
@@ -16,7 +16,7 @@ echo "==============================================="
 echo "Scene root      : ${SCENE_ROOT}"
 echo "Model path      : ${MODEL_BASELINE}"
 echo "Iterations      : ${ITERATIONS}"
-echo "Train/Test split: 300 / 35 (ratio ~8.6:1)"
+echo "Train/Test split: 295 / 40 (ratio ~7.4:1)"
 echo ""
 
 # Step 1: Train baseline model

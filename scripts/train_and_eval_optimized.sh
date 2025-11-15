@@ -9,13 +9,15 @@ SCENE_ROOT="${SCENE_ROOT:-/home/bygpu/data/video_scene}"
 MODEL_BASELINE="${MODEL_BASELINE:-./output/video_scene_20251113_005931}"
 MODEL_OPT="${MODEL_OPT:-./output/video_scene_optimized_$(date +%Y%m%d_%H%M%S)}"
 ITERATIONS="${ITERATIONS:-30000}"
-TEST_LAST="${TEST_LAST:-25}"  # Last 25 frames for test (310 train, 25 test)
+TEST_LAST="${TEST_LAST:-40}"  # Last 40 frames for test (295 train, 40 test, ratio ~7.4:1)
 
 # Optimized hyperparameters
 POSITION_LR_INIT_OPT="${POSITION_LR_INIT_OPT:-0.0002}"      # Slightly higher
 POSITION_LR_FINAL_OPT="${POSITION_LR_FINAL_OPT:-0.0000016}"
 LAMBDA_DSSIM_OPT="${LAMBDA_DSSIM_OPT:-0.25}"                # Increased SSIM weight
 LAMBDA_EDGE="${LAMBDA_EDGE:-0.1}"                           # Edge loss weight
+LAMBDA_PERCEPTUAL="${LAMBDA_PERCEPTUAL:-0.0}"              # Perceptual loss weight (0.0 = disabled by default)
+MAX_GRAD_NORM="${MAX_GRAD_NORM:-1.0}"                       # Gradient clipping norm
 DENSIFY_FROM_ITER_OPT="${DENSIFY_FROM_ITER_OPT:-500}"
 DENSIFY_UNTIL_ITER_OPT="${DENSIFY_UNTIL_ITER_OPT:-25000}"  # Extended densification period
 DENSIFY_GRAD_THRESHOLD_OPT="${DENSIFY_GRAD_THRESHOLD_OPT:-0.0002}"
@@ -27,7 +29,7 @@ echo "Scene root      : ${SCENE_ROOT}"
 echo "Baseline model  : ${MODEL_BASELINE}"
 echo "Optimized model : ${MODEL_OPT}"
 echo "Iterations      : ${ITERATIONS}"
-echo "Train/Test split: 310 / 25"
+echo "Train/Test split: 295 / 40 (ratio ~7.4:1)"
 echo ""
 
 # Step 1: Train optimized model
@@ -42,6 +44,8 @@ python train_scene_optimized.py \
   --position_lr_final "${POSITION_LR_FINAL_OPT}" \
   --lambda_dssim "${LAMBDA_DSSIM_OPT}" \
   --lambda_edge "${LAMBDA_EDGE}" \
+  --lambda_perceptual "${LAMBDA_PERCEPTUAL}" \
+  --max_grad_norm "${MAX_GRAD_NORM}" \
   --densify_from_iter "${DENSIFY_FROM_ITER_OPT}" \
   --densify_until_iter "${DENSIFY_UNTIL_ITER_OPT}" \
   --densify_grad_threshold "${DENSIFY_GRAD_THRESHOLD_OPT}" \

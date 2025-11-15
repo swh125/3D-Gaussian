@@ -143,7 +143,7 @@ if __name__ == "__main__":
     parser.add_argument("--device", type=str, default="cuda" if torch.cuda.is_available() else "cpu")
 
     args = parser.parse_args()
-
+    
     checkpoints = parse_checkpoints(args.sam_checkpoint_path, args.extra_checkpoints)
     if not checkpoints:
         raise ValueError("No SAM checkpoints provided")
@@ -222,7 +222,7 @@ if __name__ == "__main__":
 
         if not processed_masks:
             torch.save(torch.zeros((0, *original_hw), dtype=torch.bool), os.path.join(output_dir, f"{stem}.pt"))
-            continue
+                continue
 
         masks_tensor = torch.stack([m.cpu() for m in processed_masks], dim=0)
 

@@ -64,3 +64,14 @@ echo "  3. 训练对比特征:"
 echo "     python train_contrastive_feature.py -m ${MODEL_OUTPUT} --iterations 10000 --num_sampled_rays 1000"
 echo ""
 
+
+
+
+
+
+
+
+
+
+
+
