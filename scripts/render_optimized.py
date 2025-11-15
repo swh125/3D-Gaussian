@@ -125,7 +125,8 @@ def render_set_optimized(model_path, name, iteration, views, gaussians, pipeline
     else:
         render_func = render
 
-    for idx, view in enumerate(tqdm(views, desc="Rendering progress")):
+    # 先渲染彩色图像
+    for idx, view in enumerate(tqdm(views, desc="Rendering RGB")):
         # 彩色渲染：只渲染mask区域（背景黑，物体有颜色）
         if target == 'seg' and precomputed_mask is not None:
             # 使用filtered_mask参数，只渲染mask区域的Gaussian
@@ -138,20 +139,24 @@ def render_set_optimized(model_path, name, iteration, views, gaussians, pipeline
         else:
             res = render_func(view, gaussians, pipeline, background)
 
-        if target == 'seg':
-            assert precomputed_mask is not None, 'Rendering 2D segmentation mask requires a precomputed mask.'
+        rendering = res["render"]
+        gt = view.original_image[0:3, :, :]
+        torchvision.utils.save_image(gt, os.path.join(gts_path, '{0:05d}'.format(idx) + ".png"))
+        
+        if target == 'seg' or target == 'scene':
+            torchvision.utils.save_image(rendering, os.path.join(render_path, '{0:05d}'.format(idx) + ".png"))
+    
+    # 再渲染mask
+    if target == 'seg':
+        assert precomputed_mask is not None, 'Rendering 2D segmentation mask requires a precomputed mask.'
+        for idx, view in enumerate(tqdm(views, desc="Rendering masks")):
             # 转换mask类型
             mask_for_render = precomputed_mask
             if isinstance(mask_for_render, torch.Tensor) and mask_for_render.dtype == torch.bool:
                 mask_for_render = mask_for_render.float()
             # 使用优化的render_mask（修复opacity）
             mask_res = render_mask_with_fixed_opacity(view, gaussians, pipeline, background, precomputed_mask=mask_for_render)
-
-        rendering = res["render"]
-        gt = view.original_image[0:3, :, :]
-        torchvision.utils.save_image(gt, os.path.join(gts_path, '{0:05d}'.format(idx) + ".png"))
-        
-        if target == 'seg':
+            
             mask = mask_res["mask"]
             # 正常阈值
             mask[mask < 0.5] = 0
@@ -184,9 +189,6 @@ def render_set_optimized(model_path, name, iteration, views, gaussians, pipeline
                     pass
             
             torchvision.utils.save_image(mask, os.path.join(mask_path, '{0:05d}'.format(idx) + ".png"))
-        
-        if target == 'seg' or target == 'scene':
-            torchvision.utils.save_image(rendering, os.path.join(render_path, '{0:05d}'.format(idx) + ".png"))
         elif 'feature' in target:
             torch.save(rendering, os.path.join(render_path, '{0:05d}'.format(idx) + ".pt"))
         elif target == 'xyz':
