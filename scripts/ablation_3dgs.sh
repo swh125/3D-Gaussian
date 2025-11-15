@@ -1,6 +1,8 @@
 #!/usr/bin/env bash
 # 3DGS Training Optimization Ablation Study
-# Tests: Baseline, Edge Loss only, SSIM only, Both
+# Tests: 
+#   1. Loss optimization (fixed training set): Baseline, Edge Loss only, SSIM only, Both
+#   2. Training set size impact: 295 train (40 test) vs 310 train (25 test)
 
 set -euo pipefail
 
@@ -203,6 +205,65 @@ fi
 echo ""
 
 # ============================================
+# Experiment 4: Training Set Size Impact
+# ============================================
+echo "==============================================="
+echo "[Experiment 4/4] Training Set Size Impact (310 train, 25 test)"
+echo "==============================================="
+TEST_LAST_LARGE="25"  # 310 train, 25 test
+MODEL_LARGE_TRAIN="./output/video_scene_ablation_large_train_${TIMESTAMP}"
+echo "Training with larger training set (310 train, 25 test) + all optimizations..."
+echo "Using: λ_dssim=0.25, λ_edge=0.1, and all other optimized hyperparameters"
+echo ""
+
+# Use optimized hyperparameters from train_and_eval_optimized.sh
+POSITION_LR_INIT_OPT="${POSITION_LR_INIT_OPT:-0.0002}"
+POSITION_LR_FINAL_OPT="${POSITION_LR_FINAL_OPT:-0.0000016}"
+DENSIFY_FROM_ITER_OPT="${DENSIFY_FROM_ITER_OPT:-500}"
+DENSIFY_UNTIL_ITER_OPT="${DENSIFY_UNTIL_ITER_OPT:-25000}"
+DENSIFY_GRAD_THRESHOLD_OPT="${DENSIFY_GRAD_THRESHOLD_OPT:-0.0002}"
+
+python train_scene_optimized.py \
+  -s "${SCENE_ROOT}" \
+  --model_path "${MODEL_LARGE_TRAIN}" \
+  --iterations "${ITERATIONS}" \
+  --eval \
+  --test_last_n "${TEST_LAST_LARGE}" \
+  --position_lr_init "${POSITION_LR_INIT_OPT}" \
+  --position_lr_final "${POSITION_LR_FINAL_OPT}" \
+  --lambda_dssim "${LAMBDA_DSSIM_OPT}" \
+  --lambda_edge "${LAMBDA_EDGE}" \
+  --densify_from_iter "${DENSIFY_FROM_ITER_OPT}" \
+  --densify_until_iter "${DENSIFY_UNTIL_ITER_OPT}" \
+  --densify_grad_threshold "${DENSIFY_GRAD_THRESHOLD_OPT}" \
+  --save_iterations "${ITERATIONS}"
+
+echo ""
+echo "Rendering test set..."
+python render.py \
+  -m "${MODEL_LARGE_TRAIN}" \
+  -s "${SCENE_ROOT}" \
+  --iteration "${ITERATIONS}" \
+  --skip_train \
+  --eval \
+  --test_last_n "${TEST_LAST_LARGE}"
+
+echo ""
+echo "Computing metrics..."
+if [ -f "scripts/compute_metrics.py" ]; then
+  python scripts/compute_metrics.py \
+    --model_path "${MODEL_LARGE_TRAIN}" \
+    --set test \
+    --iteration "${ITERATIONS}"
+fi
+
+echo "✓ Large Training Set complete: ${MODEL_LARGE_TRAIN}"
+echo ""
+echo "Note: This experiment uses 310 train / 25 test split"
+echo "      Compare with 'Both' experiment (295 train / 40 test) to see training set size impact"
+echo ""
+
+# ============================================
 # Summary
 # ============================================
 echo "==============================================="
@@ -210,13 +271,29 @@ echo "Ablation Study Complete!"
 echo "==============================================="
 echo ""
 echo "Results saved in:"
-echo "  - Baseline: ${MODEL_BASELINE}"
-echo "  - Edge Loss Only: ${MODEL_EDGE_ONLY}"
-echo "  - SSIM Only: ${MODEL_SSIM_ONLY}"
-echo "  - Both: ${MODEL_BOTH}"
+echo "  - Baseline: ${MODEL_BASELINE} (295 train, 40 test)"
+echo "  - Edge Loss Only: ${MODEL_EDGE_ONLY} (295 train, 40 test)"
+echo "  - SSIM Only: ${MODEL_SSIM_ONLY} (295 train, 40 test)"
+echo "  - Both: ${MODEL_BOTH} (295 train, 40 test)"
+echo "  - Large Train Set: ${MODEL_LARGE_TRAIN} (310 train, 25 test, all optimizations)"
 echo ""
 echo "Metrics location:"
 echo "  - <model_path>/test/ours_${ITERATIONS}/metrics.txt"
+echo ""
+echo "Ablation Study Structure:"
+echo "  1. Loss Optimization (Fixed Training Set: 295 train, 40 test):"
+echo "     - Baseline vs Edge Loss vs SSIM vs Both"
+echo "     - Proves algorithm-level improvements"
+echo ""
+echo "  2. Training Set Size Impact:"
+echo "     - Both (295 train, 40 test) vs Large Train Set (310 train, 25 test)"
+echo "     - Both use same optimizations, only training set size differs"
+echo "     - Shows data-level optimization impact"
+echo ""
+echo "  3. Combined Analysis:"
+echo "     - Loss optimization: algorithm-level improvement"
+echo "     - Training set size: data-level improvement"
+echo "     - Both are complementary and can be used together"
 echo ""
 echo "To compare PSNR/SSIM/LPIPS, check the metrics files above."
 
