@@ -17,15 +17,61 @@ import argparse as arg_parse
 import os
 
 
-def verify_order(data_path, test_last_n=40):
+def get_data_path_from_env_or_model():
+    """从环境变量或模型路径自动获取数据路径"""
+    # 1. 从环境变量获取
+    output_dir = os.environ.get('OUTPUT_DIR')
+    if output_dir and Path(output_dir).exists():
+        return output_dir
+    
+    # 2. 从最新的模型路径的cfg_args读取
+    output_base = Path('./output')
+    if output_base.exists():
+        model_dirs = sorted([d for d in output_base.iterdir() if d.is_dir()], 
+                           key=lambda x: x.stat().st_mtime, reverse=True)
+        for model_dir in model_dirs[:5]:  # 检查最近5个模型
+            cfg_file = model_dir / 'cfg_args'
+            if cfg_file.exists():
+                try:
+                    with open(cfg_file, 'r') as f:
+                        content = f.read()
+                        # 查找source_path
+                        for line in content.split('\n'):
+                            if 'source_path' in line:
+                                parts = line.strip().split()
+                                for i, part in enumerate(parts):
+                                    if 'source_path' in part and i + 1 < len(parts):
+                                        path = parts[i + 1].strip("'\"")
+                                        if Path(path).exists():
+                                            return path
+                except:
+                    pass
+    
+    return None
+
+
+def verify_order(data_path=None, test_last_n=40):
     """验证图片顺序和训练/测试集划分"""
     print("=" * 70)
     print("验证图片顺序和训练/测试集划分")
     print("=" * 70)
     print()
     
+    # 如果没有提供data_path，尝试自动获取
+    if data_path is None:
+        print("未提供数据路径，尝试自动获取...")
+        data_path = get_data_path_from_env_or_model()
+        if data_path:
+            print(f"自动获取到数据路径: {data_path}")
+        else:
+            print("❌ 错误: 无法自动获取数据路径")
+            print("请使用 --data_path 参数指定，或设置 OUTPUT_DIR 环境变量")
+            return False
+    
+    data_path = Path(data_path)
+    
     # 1. 检查原始图片顺序
-    images_dir = Path(data_path) / "images"
+    images_dir = data_path / "images"
     if not images_dir.exists():
         print(f"❌ 错误: 图片目录不存在: {images_dir}")
         return False
@@ -161,8 +207,8 @@ def verify_order(data_path, test_last_n=40):
 
 def main():
     parser = argparse.ArgumentParser(description="验证图片顺序和训练/测试集划分")
-    parser.add_argument("--data_path", type=str, required=True,
-                       help="数据目录路径（COLMAP输出目录）")
+    parser.add_argument("--data_path", type=str, default=None,
+                       help="数据目录路径（COLMAP输出目录，如果不提供会尝试自动获取）")
     parser.add_argument("--test_last_n", type=int, default=40,
                        help="测试集数量（后N个，默认: 40）")
     
@@ -174,4 +220,5 @@ def main():
 
 if __name__ == "__main__":
     main()
+
 

@@ -302,6 +302,20 @@ echo ""
 echo "Model path: ${MODEL_PATH}"
 echo "Data path: ${OUTPUT_DIR}"
 echo ""
+
+# 导出OUTPUT_DIR为环境变量，供后续脚本使用
+export OUTPUT_DIR
+
+# 验证图片顺序和训练/测试集划分
+if [[ "${TEST_LAST}" -gt 0 ]]; then
+    echo "验证图片顺序和训练/测试集划分..."
+    echo "----------------------------------------"
+    python scripts/verify_temporal_order.py \
+      --data_path "${OUTPUT_DIR}" \
+      --test_last_n "${TEST_LAST}" || echo "警告: 验证脚本执行失败，但pipeline已完成"
+    echo ""
+fi
+
 echo "Next steps:"
 echo "  1. Run GUI for interactive segmentation:"
 echo "     python saga_gui.py --model_path ${MODEL_PATH} --data_path ${OUTPUT_DIR}"
