@@ -217,3 +217,6 @@ python scripts/refine_masks_with_iou_check.py \
 - **GT Mask格式**：PNG图片，白色=物体，黑色=背景
 - **GT Mask位置**：`./data/your_scene/gt_masks/test/`
 
+
+
+

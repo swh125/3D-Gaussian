@@ -22,25 +22,25 @@ from tqdm import tqdm
 
 
 def morphological_refinement(mask: np.ndarray, 
-                           opening_kernel: int = 3,
-                           closing_kernel: int = 5,
-                           remove_small: int = 100) -> np.ndarray:
+                           opening_kernel: int = 2,
+                           closing_kernel: int = 3,
+                           remove_small: int = 0) -> np.ndarray:
     """
-    形态学细化：去除光晕和噪点
+    形态学细化：去除光晕和噪点（保守参数，保持IoU）
     """
     mask_uint8 = (mask * 255).astype(np.uint8) if mask.max() <= 1.0 else mask.astype(np.uint8)
     
-    # 1. 开运算：去除边缘的小噪点和光晕
+    # 1. 开运算：去除边缘的小噪点和光晕（kernel小，保持IoU）
     if opening_kernel > 0:
         kernel_open = cv2.getStructuringElement(cv2.MORPH_ELLIPSE, (opening_kernel, opening_kernel))
         mask_uint8 = cv2.morphologyEx(mask_uint8, cv2.MORPH_OPEN, kernel_open)
     
-    # 2. 闭运算：填补小洞
+    # 2. 闭运算：填补小洞（kernel小，保持IoU）
     if closing_kernel > 0:
         kernel_close = cv2.getStructuringElement(cv2.MORPH_ELLIPSE, (closing_kernel, closing_kernel))
         mask_uint8 = cv2.morphologyEx(mask_uint8, cv2.MORPH_CLOSE, kernel_close)
     
-    # 3. 移除小连通域
+    # 3. 移除小连通域（默认关闭，保持IoU）
     if remove_small > 0:
         num_labels, labels, stats, centroids = cv2.connectedComponentsWithStats(mask_uint8, connectivity=8)
         if num_labels > 1:
@@ -52,9 +52,32 @@ def morphological_refinement(mask: np.ndarray,
     return mask_uint8.astype(np.float32) / 255.0
 
 
+def compute_mask_iou(pred_mask: torch.Tensor, gt_mask: torch.Tensor) -> float:
+    """计算IoU"""
+    pred_bool = pred_mask.bool()
+    gt_bool = gt_mask.bool()
+    intersection = torch.logical_and(pred_bool, gt_bool).sum().item()
+    union = torch.logical_or(pred_bool, gt_bool).sum().item()
+    if union == 0:
+        return 1.0 if intersection == 0 else 0.0
+    return intersection / union
+
+
+def load_mask_image(path: Path) -> torch.Tensor:
+    """加载mask图片"""
+    from PIL import Image
+    with Image.open(path) as img:
+        if img.mode != 'L':
+            img = img.convert('L')
+        data = torch.from_numpy(np.array(img)).float()
+        mask = (data / 255.0 > 0.5).float()
+    return mask
+
+
 def refine_3d_mask_via_2d(mask_3d_path: str, model_path: str, iteration: int,
-                          opening_kernel: int = 3, closing_kernel: int = 5,
-                          num_views: int = 20, vote_threshold: float = 0.5):
+                          opening_kernel: int = 2, closing_kernel: int = 3,
+                          num_views: int = 20, vote_threshold: float = 0.5,
+                          gt_mask_dir: str = None, source_path: str = None):
     """
     通过渲染多个视角的2D mask，进行形态学细化，然后通过投票机制更新3D mask
     """
@@ -105,6 +128,51 @@ def refine_3d_mask_via_2d(mask_3d_path: str, model_path: str, iteration: int,
     gaussians = GaussianModel(dataset.sh_degree)
     scene = Scene(dataset, gaussians, load_iteration=iteration, shuffle=False)
     
+    # 如果有GT masks，先计算原始IoU
+    original_iou = None
+    if gt_mask_dir and source_path and Path(gt_mask_dir).exists():
+        print("Computing original IoU with GT masks...")
+        try:
+            # 先应用mask
+            gaussians_temp = GaussianModel(dataset.sh_degree)
+            scene_temp = Scene(dataset, gaussians_temp, load_iteration=iteration, shuffle=False)
+            gaussians_temp.segment(mask_3d.bool().cuda())
+            
+            # 渲染测试集的2D masks
+            test_cameras = scene_temp.getTestCameras()
+            if len(test_cameras) > 0:
+                bg_color = [1, 1, 1] if dataset.white_background else [0, 0, 0]
+                background = torch.tensor(bg_color, dtype=torch.float32, device="cuda")
+                masks_2d_original = []
+                mask_3d_float = mask_3d.float().cuda()
+                for cam in test_cameras:
+                    mask_res = render_mask(cam, gaussians_temp, pipeline, background, precomputed_mask=mask_3d_float)
+                    mask = mask_res["mask"][0]
+                    if len(mask.shape) == 3:
+                        mask = mask[:, :, 0]
+                    masks_2d_original.append((mask > 0.5).float())
+                
+                # 计算IoU
+                gt_files = sorted(Path(gt_mask_dir).glob("*.png"))
+                if len(gt_files) > 0:
+                    min_len = min(len(masks_2d_original), len(gt_files))
+                    iou_values = []
+                    for idx in range(min_len):
+                        pred_mask = masks_2d_original[idx]
+                        gt_mask = load_mask_image(gt_files[idx])
+                        if pred_mask.shape != gt_mask.shape:
+                            from torch.nn.functional import interpolate
+                            h, w = gt_mask.shape
+                            pred_mask = pred_mask.unsqueeze(0).unsqueeze(0)
+                            pred_mask = interpolate(pred_mask, size=(h, w), mode='nearest')
+                            pred_mask = pred_mask.squeeze()
+                        iou = compute_mask_iou(pred_mask, gt_mask)
+                        iou_values.append(iou)
+                    original_iou = np.mean(iou_values) if iou_values else None
+                    print(f"Original IoU: {original_iou:.4f}")
+        except Exception as e:
+            print(f"Warning: Failed to compute original IoU: {e}")
+    
     # 应用原始mask（segment需要bool类型）
     gaussians.segment(mask_3d.bool().cuda())
     
@@ -133,8 +201,8 @@ def refine_3d_mask_via_2d(mask_3d_path: str, model_path: str, iteration: int,
         if len(mask_2d.shape) == 3:
             mask_2d = mask_2d[:, :, 0]  # 取第一个通道
         
-        # 形态学细化
-        refined_2d = morphological_refinement(mask_2d, opening_kernel, closing_kernel, remove_small=100)
+        # 形态学细化（保守参数，保持IoU）
+        refined_2d = morphological_refinement(mask_2d, opening_kernel, closing_kernel, remove_small=0)
         
         # 将细化后的2D mask转换回tensor
         refined_2d_tensor = torch.from_numpy(refined_2d).float().cuda()
@@ -197,15 +265,73 @@ def refine_3d_mask_via_2d(mask_3d_path: str, model_path: str, iteration: int,
                 print(f"Removed {isolated.sum()} isolated points")
                 print(f"Refined mask True count: {refined_mask_3d.sum().item()}")
                 
+                # 如果有GT masks，检查优化后的IoU
+                if gt_mask_dir and source_path and Path(gt_mask_dir).exists():
+                    print("Computing refined IoU with GT masks...")
+                    try:
+                        # 重新加载gaussians（因为segment改变了）
+                        gaussians_refined = GaussianModel(dataset.sh_degree)
+                        scene_refined = Scene(dataset, gaussians_refined, load_iteration=iteration, shuffle=False)
+                        gaussians_refined.segment(refined_mask_3d.bool().cuda())
+                        
+                        test_cameras = scene_refined.getTestCameras()
+                        if len(test_cameras) > 0:
+                            bg_color = [1, 1, 1] if dataset.white_background else [0, 0, 0]
+                            background = torch.tensor(bg_color, dtype=torch.float32, device="cuda")
+                            masks_2d_refined = []
+                            refined_mask_3d_float = refined_mask_3d.float().cuda()
+                            for cam in test_cameras:
+                                mask_res = render_mask(cam, gaussians_refined, pipeline, background, precomputed_mask=refined_mask_3d_float)
+                                mask = mask_res["mask"][0]
+                                if len(mask.shape) == 3:
+                                    mask = mask[:, :, 0]
+                                masks_2d_refined.append((mask > 0.5).float())
+                            
+                            # 计算优化后的IoU
+                            gt_files = sorted(Path(gt_mask_dir).glob("*.png"))
+                            if len(gt_files) > 0:
+                                min_len = min(len(masks_2d_refined), len(gt_files))
+                                iou_values = []
+                                for idx in range(min_len):
+                                    pred_mask = masks_2d_refined[idx]
+                                    gt_mask = load_mask_image(gt_files[idx])
+                                    if pred_mask.shape != gt_mask.shape:
+                                        from torch.nn.functional import interpolate
+                                        h, w = gt_mask.shape
+                                        pred_mask = pred_mask.unsqueeze(0).unsqueeze(0)
+                                        pred_mask = interpolate(pred_mask, size=(h, w), mode='nearest')
+                                        pred_mask = pred_mask.squeeze()
+                                    iou = compute_mask_iou(pred_mask, gt_mask)
+                                    iou_values.append(iou)
+                                refined_iou = np.mean(iou_values) if iou_values else None
+                                print(f"Refined IoU: {refined_iou:.4f}")
+                                
+                                # 如果IoU降低了，返回原始mask
+                                if original_iou is not None and refined_iou < original_iou:
+                                    print(f"⚠ IoU decreased from {original_iou:.4f} to {refined_iou:.4f}")
+                                    print("  Returning original mask (IoU decreased)")
+                                    return mask_3d
+                                elif original_iou is not None:
+                                    print(f"✓ IoU maintained or improved: {original_iou:.4f} -> {refined_iou:.4f}")
+                    except Exception as e:
+                        print(f"Warning: Failed to compute refined IoU: {e}, using refined mask")
+                
                 return refined_mask_3d
             except ImportError:
                 print("Warning: sklearn not available, skipping spatial refinement")
+                # 如果没有优化，检查IoU（应该和原始一样）
+                if original_iou is not None:
+                    print(f"  Using original mask (IoU: {original_iou:.4f})")
                 return mask_3d
         else:
             print("Warning: Too few masked points for spatial refinement")
+            if original_iou is not None:
+                print(f"  Using original mask (IoU: {original_iou:.4f})")
             return mask_3d
     else:
         print("Warning: No masked points found")
+        if original_iou is not None:
+            print(f"  Using original mask (IoU: {original_iou:.4f})")
         return mask_3d
 
 
@@ -219,10 +345,14 @@ def main():
                        help="Path to trained model (e.g., ./output/output_scene_20251112_203112)")
     parser.add_argument("--iteration", type=int, default=30000,
                        help="Model iteration to load")
-    parser.add_argument("--opening_kernel", type=int, default=3,
-                       help="Opening kernel size")
-    parser.add_argument("--closing_kernel", type=int, default=5,
-                       help="Closing kernel size")
+    parser.add_argument("--opening_kernel", type=int, default=2,
+                       help="Opening kernel size (default: 2, conservative to preserve IoU)")
+    parser.add_argument("--closing_kernel", type=int, default=3,
+                       help="Closing kernel size (default: 3, conservative to preserve IoU)")
+    parser.add_argument("--gt_mask_dir", type=str, default=None,
+                       help="Directory containing GT masks (optional, for IoU check)")
+    parser.add_argument("--source_path", type=str, default=None,
+                       help="Source path to scene data (required if --gt_mask_dir is provided)")
     parser.add_argument("--num_views", type=int, default=20,
                        help="Number of views to use for refinement")
     
@@ -265,7 +395,10 @@ def main():
                 args.iteration,
                 args.opening_kernel,
                 args.closing_kernel,
-                args.num_views
+                args.num_views,
+                vote_threshold=0.5,
+                gt_mask_dir=args.gt_mask_dir,
+                source_path=args.source_path
             )
             
             output_path = output_dir / mask_name

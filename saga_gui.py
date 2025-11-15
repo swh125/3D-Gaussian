@@ -298,7 +298,7 @@ class GaussianSplattingGUI:
             dpg.add_raw_texture(self.width, self.height, self.render_buffer, format=dpg.mvFormat_Float_rgb, tag="_texture")
 
         ### register window
-        with dpg.window(tag="_primary_window", width=self.window_width+300, height=self.window_height):
+        with dpg.window(tag="_primary_window", width=self.window_width+300, height=max(self.window_height, 900)):
             dpg.add_image("_texture")   # add the texture
 
         dpg.set_primary_window("_primary_window", True)
@@ -344,7 +344,7 @@ class GaussianSplattingGUI:
         def render_mode_cluster_callback(sender):
             self.render_mode_cluster = not self.render_mode_cluster
         # control window
-        with dpg.window(label="Control", tag="_control_window", width=300, height=550, pos=[self.window_width+10, 0]):
+        with dpg.window(label="Control", tag="_control_window", width=300, height=900, pos=[self.window_width+10, 0]):
 
             dpg.add_text("Mouse position: click anywhere to start. ", tag="pos_item")
             dpg.add_slider_float(label="Scale", default_value=0.5,
@@ -458,7 +458,7 @@ class GaussianSplattingGUI:
             
             dpg.add_mouse_click_handler(callback=change_pos)
             
-        dpg.create_viewport(title="Gaussian-Splatting-Viewer", width=self.window_width+320, height=self.window_height, resizable=False)
+        dpg.create_viewport(title="Gaussian-Splatting-Viewer", width=self.window_width+320, height=max(self.window_height, 900), resizable=True)
 
         ### global theme
         with dpg.theme() as theme_no_padding:

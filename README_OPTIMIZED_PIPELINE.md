@@ -94,3 +94,4 @@ A: 主要区别是2D mask渲染时自动应用形态学优化，其他步骤相�
 - **渲染结果**：`<model_path>/train/ours_<iteration>/renders/`
 - **Mask结果**：`<model_path>/train/ours_<iteration>/mask/`（已优化）
 
+
