@@ -71,8 +71,21 @@ def refine_3d_mask_via_2d(mask_3d_path: str, model_path: str, iteration: int,
     
     # 加载模型和场景
     print(f"Loading model from: {model_path}")
-    dataset = ModelParams(parser=ArgumentParser(), model_path=model_path)
-    pipeline = PipelineParams(parser=ArgumentParser())
+    parser = ArgumentParser()
+    model_params = ModelParams(parser, sentinel=True)
+    pipeline_params = PipelineParams(parser)
+    
+    # 手动设置 model_path 并解析参数
+    import sys
+    original_argv = sys.argv
+    try:
+        sys.argv = ['refine_masks_with_model.py', '--model_path', model_path]
+        args = get_combined_args(parser)
+    finally:
+        sys.argv = original_argv
+    
+    dataset = model_params.extract(args)
+    pipeline = pipeline_params.extract(args)
     
     gaussians = GaussianModel(dataset.sh_degree)
     scene = Scene(dataset, gaussians, load_iteration=iteration, shuffle=False)
@@ -96,7 +109,7 @@ def refine_3d_mask_via_2d(mask_3d_path: str, model_path: str, iteration: int,
     # 对每个视角渲染mask并进行形态学细化
     for cam in tqdm(train_cameras, desc="Rendering and refining 2D masks"):
         # 渲染2D mask
-        mask_res = render_mask(cam, gaussians, pipeline.extract(Namespace()), 
+        mask_res = render_mask(cam, gaussians, pipeline, 
                                background, precomputed_mask=mask_3d.cuda())
         mask_2d = mask_res["mask"][0].cpu().numpy()  # [H, W, 3] -> [H, W]
         if len(mask_2d.shape) == 3:
@@ -113,7 +126,7 @@ def refine_3d_mask_via_2d(mask_3d_path: str, model_path: str, iteration: int,
         # 简化方法：如果原始mask中的点渲染后在细化后的mask区域内，则投票+1
         
         # 重新渲染原始mask，看哪些点可见
-        mask_res_original = render_mask(cam, gaussians, pipeline.extract(Namespace()), 
+        mask_res_original = render_mask(cam, gaussians, pipeline, 
                                         background, precomputed_mask=mask_3d.cuda())
         mask_2d_original = mask_res_original["mask"][0].cpu().numpy()
         if len(mask_2d_original.shape) == 3:
