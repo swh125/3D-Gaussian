@@ -69,27 +69,26 @@ def render_set(model_path, name, iteration, views, gaussians, pipeline, backgrou
             mask[mask != 0] = 1
             mask = mask[0, :, :]
             
-            # 应用形态学操作去除边缘光晕和锯齿
-            # 开运算：去除边缘小噪点和光晕
-            # 闭运算：填补小洞，平滑边缘
-            try:
-                import cv2
-                import numpy as np
-                mask_np = (mask.cpu().numpy() * 255).astype(np.uint8)
-                
-                # 开运算：去除光晕（kernel=2，保守参数）
-                kernel_open = cv2.getStructuringElement(cv2.MORPH_ELLIPSE, (2, 2))
-                mask_np = cv2.morphologyEx(mask_np, cv2.MORPH_OPEN, kernel_open)
-                
-                # 闭运算：平滑边缘，去除锯齿（kernel=3，保守参数）
-                kernel_close = cv2.getStructuringElement(cv2.MORPH_ELLIPSE, (3, 3))
-                mask_np = cv2.morphologyEx(mask_np, cv2.MORPH_CLOSE, kernel_close)
-                
-                # 转换回tensor
-                mask = torch.from_numpy(mask_np.astype(np.float32) / 255.0).to(mask.device)
-            except ImportError:
-                # 如果cv2不可用，跳过形态学操作
-                pass
+            # 应用形态学操作去除边缘光晕和锯齿（可选，通过apply_morphology参数控制）
+            if apply_morphology:
+                try:
+                    import cv2
+                    import numpy as np
+                    mask_np = (mask.cpu().numpy() * 255).astype(np.uint8)
+                    
+                    # 开运算：去除光晕（kernel=2，保守参数）
+                    kernel_open = cv2.getStructuringElement(cv2.MORPH_ELLIPSE, (opening_kernel, opening_kernel))
+                    mask_np = cv2.morphologyEx(mask_np, cv2.MORPH_OPEN, kernel_open)
+                    
+                    # 闭运算：平滑边缘，去除锯齿（kernel=3，保守参数）
+                    kernel_close = cv2.getStructuringElement(cv2.MORPH_ELLIPSE, (closing_kernel, closing_kernel))
+                    mask_np = cv2.morphologyEx(mask_np, cv2.MORPH_CLOSE, kernel_close)
+                    
+                    # 转换回tensor
+                    mask = torch.from_numpy(mask_np.astype(np.float32) / 255.0).to(mask.device)
+                except ImportError:
+                    # 如果cv2不可用，跳过形态学操作
+                    pass
             
             torchvision.utils.save_image(mask, os.path.join(mask_path, '{0:05d}'.format(idx) + ".png"))
         if target == 'seg' or target == 'scene':
@@ -102,7 +101,7 @@ def render_set(model_path, name, iteration, views, gaussians, pipeline, backgrou
         
         
 
-def render_sets(dataset : ModelParams, iteration : int, pipeline : PipelineParams, skip_train : bool, skip_test : bool, segment : bool = False, target = 'scene', idx = 0, precomputed_mask = None):
+def render_sets(dataset : ModelParams, iteration : int, pipeline : PipelineParams, skip_train : bool, skip_test : bool, segment : bool = False, target = 'scene', idx = 0, precomputed_mask = None, apply_morphology = True):
     dataset.need_features = dataset.need_masks = False
     if segment:
         assert target == 'seg' or target == 'coarse_seg_everything' or precomputed_mask is not None and "Segmentation only works with target seg!"
@@ -145,10 +144,10 @@ def render_sets(dataset : ModelParams, iteration : int, pipeline : PipelineParam
         background = torch.tensor(bg_color, dtype=torch.float32, device="cuda")
 
         if not skip_train:
-             render_set(dataset.model_path, "train", scene.loaded_iter, scene.getTrainCameras(), gaussians, pipeline, background, target, precomputed_mask=precomputed_mask)
+             render_set(dataset.model_path, "train", scene.loaded_iter, scene.getTrainCameras(), gaussians, pipeline, background, target, precomputed_mask=precomputed_mask, apply_morphology=apply_morphology)
 
         if not skip_test:
-             render_set(dataset.model_path, "test", scene.loaded_iter, scene.getTestCameras(), gaussians, pipeline, background, target, precomputed_mask=precomputed_mask)
+             render_set(dataset.model_path, "test", scene.loaded_iter, scene.getTestCameras(), gaussians, pipeline, background, target, precomputed_mask=precomputed_mask, apply_morphology=apply_morphology)
 
 if __name__ == "__main__":
     # Set up command line argument parser
@@ -163,6 +162,7 @@ if __name__ == "__main__":
     parser.add_argument('--target', default='scene', const='scene', nargs='?', choices=['scene', 'seg', 'feature', 'coarse_seg_everything', 'contrastive_feature', 'xyz'])
     parser.add_argument('--idx', default=0, type=int)
     parser.add_argument('--precomputed_mask', default=None, type=str)
+    parser.add_argument('--no_morphology', action='store_true', help='Disable morphological operations on masks')
 
     args = get_combined_args(parser)
     print("Rendering " + args.model_path)
@@ -175,4 +175,5 @@ if __name__ == "__main__":
     # Initialize system state (RNG)
     safe_state(args.quiet)
 
-    render_sets(model.extract(args), args.iteration, pipeline.extract(args), args.skip_train, args.skip_test, args.segment, args.target, args.idx, args.precomputed_mask)
+    apply_morphology = not args.no_morphology
+    render_sets(model.extract(args), args.iteration, pipeline.extract(args), args.skip_train, args.skip_test, args.segment, args.target, args.idx, args.precomputed_mask, apply_morphology=apply_morphology)
