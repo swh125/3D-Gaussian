@@ -30,47 +30,8 @@ except ImportError:
     TENSORBOARD_FOUND = False
 
 import torch.nn.functional as F
-import torchvision.models as models
 
 # import time
-
-# Initialize VGG for perceptual loss (lazy loading)
-_vgg_model = None
-def get_vgg_model():
-    """Lazy load VGG model for perceptual loss"""
-    global _vgg_model
-    if _vgg_model is None:
-        try:
-            vgg = models.vgg16(pretrained=True).features[:16].cuda().eval()
-            for param in vgg.parameters():
-                param.requires_grad = False
-            _vgg_model = vgg
-        except Exception as e:
-            print(f"Warning: Could not load VGG model for perceptual loss: {e}")
-            _vgg_model = None
-    return _vgg_model
-
-def perceptual_loss(image, gt_image, vgg_model=None):
-    """Compute perceptual loss using VGG features"""
-    if vgg_model is None:
-        return torch.tensor(0.0, device=image.device)
-    
-    try:
-        # Normalize images for VGG (ImageNet normalization)
-        mean = torch.tensor([0.485, 0.456, 0.406], device=image.device).view(3, 1, 1)
-        std = torch.tensor([0.229, 0.224, 0.225], device=image.device).view(3, 1, 1)
-        
-        img_norm = (image - mean) / std
-        gt_norm = (gt_image - mean) / std
-        
-        # Extract features
-        feat_pred = vgg_model(img_norm.unsqueeze(0))
-        feat_gt = vgg_model(gt_norm.unsqueeze(0))
-        
-        return l1_loss(feat_pred, feat_gt)
-    except Exception as e:
-        # If anything goes wrong, return zero loss
-        return torch.tensor(0.0, device=image.device)
 
 def edge_loss(image, gt_image):
     """Compute edge-aware loss using Sobel filters"""
@@ -95,7 +56,7 @@ def edge_loss(image, gt_image):
     edge_gt = sobel_filter(gt_image)
     return l1_loss(edge_pred, edge_gt)
 
-def training(dataset, opt, pipe, testing_iterations, saving_iterations, checkpoint_iterations, checkpoint, debug_from, finetune_from=None, finetune_lr_scale=0.1, lambda_perceptual=0.0, max_grad_norm=1.0):
+def training(dataset, opt, pipe, testing_iterations, saving_iterations, checkpoint_iterations, checkpoint, debug_from, finetune_from=None, finetune_lr_scale=0.1):
     first_iter = 0
     tb_writer = prepare_output_and_logger(dataset)
     gaussians = GaussianModel(dataset.sh_degree)
@@ -174,32 +135,16 @@ def training(dataset, opt, pipe, testing_iterations, saving_iterations, checkpoi
         Ll1 = l1_loss(image, gt_image)
         Lssim = (1.0 - ssim(image, gt_image))
         
-        # Enhanced loss components
-        lambda_edge = getattr(opt, 'lambda_edge', 0.1)
-        lambda_perceptual = lambda_perceptual  # Passed as function argument
-        
+        # Base loss
         loss = (1.0 - opt.lambda_dssim) * Ll1 + opt.lambda_dssim * Lssim
         
-        # Add edge loss
+        # Add edge loss (original optimization)
+        lambda_edge = getattr(opt, 'lambda_edge', 0.1)
         if lambda_edge > 0:
             Ledge = edge_loss(image, gt_image)
             loss = loss + lambda_edge * Ledge
         
-        # Add perceptual loss (optional)
-        if lambda_perceptual > 0:
-            vgg_model = get_vgg_model()
-            Lperceptual = perceptual_loss(image, gt_image, vgg_model)
-            loss = loss + lambda_perceptual * Lperceptual
-        
         loss.backward()
-        
-        # Gradient clipping for stability
-        if max_grad_norm > 0:
-            # Collect all parameters from all param groups
-            all_params = []
-            for param_group in gaussians.optimizer.param_groups:
-                all_params.extend(param_group['params'])
-            torch.nn.utils.clip_grad_norm_(all_params, max_grad_norm)
 
         iter_end.record()
 
@@ -315,8 +260,6 @@ if __name__ == "__main__":
     parser.add_argument("--checkpoint_iterations", nargs="+", type=int, default=[])
     parser.add_argument("--start_checkpoint", type=str, default = None)
     parser.add_argument("--lambda_edge", type=float, default=0.1, help="Weight for edge loss")
-    parser.add_argument("--lambda_perceptual", type=float, default=0.0, help="Weight for perceptual loss (VGG features, default: 0.0 to disable)")
-    parser.add_argument("--max_grad_norm", type=float, default=1.0, help="Gradient clipping norm (default: 1.0, set to 0 to disable)")
     parser.add_argument("--finetune_from", type=str, default=None, help="Checkpoint path for finetuning (will scale down learning rates)")
     parser.add_argument("--finetune_lr_scale", type=float, default=0.1, help="Learning rate scale for finetuning (default: 0.1)")
     args = parser.parse_args(sys.argv[1:])
@@ -325,10 +268,6 @@ if __name__ == "__main__":
     print("Optimizing " + args.model_path)
     if args.lambda_edge > 0:
         print(f"Using edge loss with weight: {args.lambda_edge}")
-    if args.lambda_perceptual > 0:
-        print(f"Using perceptual loss with weight: {args.lambda_perceptual}")
-    if args.max_grad_norm > 0:
-        print(f"Using gradient clipping with max norm: {args.max_grad_norm}")
     if args.finetune_from:
         print(f"Finetuning mode: loading from {args.finetune_from}")
 
@@ -338,7 +277,7 @@ if __name__ == "__main__":
     # Start GUI server, configure and run training
     network_gui.init(args.ip, args.port)
     torch.autograd.set_detect_anomaly(args.detect_anomaly)
-    training(lp.extract(args), op.extract(args), pp.extract(args), args.test_iterations, args.save_iterations, args.checkpoint_iterations, args.start_checkpoint, args.debug_from, args.finetune_from, args.finetune_lr_scale, args.lambda_perceptual, args.max_grad_norm)
+    training(lp.extract(args), op.extract(args), pp.extract(args), args.test_iterations, args.save_iterations, args.checkpoint_iterations, args.start_checkpoint, args.debug_from, args.finetune_from, args.finetune_lr_scale)
 
     # All done
     print("\nTraining complete.")
