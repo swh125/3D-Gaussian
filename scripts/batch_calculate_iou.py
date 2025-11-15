@@ -28,29 +28,46 @@ def main():
     optimized_mask_dir = desktop / "items_optimized_gui_render" / "test" / "ours_30000" / "mask"
     
     # 先解压zip文件（如果存在且还没解压）
+    extract_dir = None
     if zip_path.exists():
-        if not optimized_mask_dir.exists():
-            import zipfile
-            print(f"📦 解压 {zip_path}...")
-            try:
-                with zipfile.ZipFile(zip_path, 'r') as zip_ref:
-                    zip_ref.extractall(desktop)
-                print(f"✓ 解压完成到: {desktop / 'items_optimized_gui_render'}")
-            except Exception as e:
-                print(f"❌ 解压失败: {e}")
-                return
-        else:
-            print(f"✓ 已解压，使用现有目录: {optimized_mask_dir}")
+        import zipfile
+        # 先检查zip内部结构
+        with zipfile.ZipFile(zip_path, 'r') as zip_ref:
+            file_list = zip_ref.namelist()
+            # 找到第一个目录作为根目录
+            root_dirs = set()
+            for fname in file_list:
+                if '/' in fname:
+                    root_dir = fname.split('/')[0]
+                    root_dirs.add(root_dir)
+            
+            if root_dirs:
+                expected_root = list(root_dirs)[0]
+                extract_dir = desktop / expected_root
+                print(f"📦 解压 {zip_path}...")
+                print(f"   检测到zip根目录: {expected_root}")
+                
+                if not optimized_mask_dir.exists() and not extract_dir.exists():
+                    try:
+                        zip_ref.extractall(desktop)
+                        print(f"✓ 解压完成到: {extract_dir}")
+                    except Exception as e:
+                        print(f"❌ 解压失败: {e}")
+                        return
+                else:
+                    print(f"✓ 已解压，使用现有目录")
+            else:
+                print(f"⚠️  无法确定zip根目录")
+                extract_dir = desktop / "items_optimized_gui_render"
     else:
         print(f"⚠️  Zip文件不存在: {zip_path}")
-        print(f"   尝试使用现有目录: {optimized_mask_dir}")
+        extract_dir = desktop / "items_optimized_gui_render"
     
-    # 检查解压后的目录结构
-    extract_dir = desktop / "items_optimized_gui_render"
-    if extract_dir.exists():
+    # 检查解压后的目录结构，自动查找mask目录
+    if extract_dir and extract_dir.exists():
         print(f"\n🔍 检查解压后的目录结构:")
         print(f"   根目录: {extract_dir}")
-        # 查找mask目录
+        # 递归查找mask目录
         mask_dirs = list(extract_dir.rglob("mask"))
         if mask_dirs:
             print(f"   找到 {len(mask_dirs)} 个mask目录:")
@@ -67,11 +84,29 @@ def main():
             print(f"   ❌ 未找到mask目录")
             # 列出所有子目录
             print(f"   子目录列表:")
-            for item in extract_dir.iterdir():
-                if item.is_dir():
-                    print(f"     - {item.name}")
+            for item in extract_dir.rglob("*"):
+                if item.is_dir() and "mask" in item.name.lower():
+                    print(f"     - {item}")
+            # 尝试查找包含png文件的目录
+            png_dirs = []
+            for item in extract_dir.rglob("*.png"):
+                png_dirs.append(item.parent)
+                break
+            if png_dirs:
+                print(f"\n   找到PNG文件在: {png_dirs[0]}")
+                optimized_mask_dir = png_dirs[0]
+                print(f"✓ 使用PNG目录: {optimized_mask_dir}")
     else:
         print(f"⚠️  解压目录不存在: {extract_dir}")
+        print(f"   尝试在桌面查找包含mask的目录...")
+        # 在桌面查找所有可能包含mask的目录
+        for item in desktop.iterdir():
+            if item.is_dir() and "optimized" in item.name.lower():
+                mask_dirs = list(item.rglob("mask"))
+                if mask_dirs:
+                    optimized_mask_dir = mask_dirs[0]
+                    print(f"✓ 找到: {optimized_mask_dir}")
+                    break
     
     gt_json_dir = desktop
     
