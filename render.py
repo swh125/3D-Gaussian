@@ -47,23 +47,36 @@ def render_set(model_path, name, iteration, views, gaussians, pipeline, backgrou
     else:
         render_func = render
 
-    for idx, view in enumerate(tqdm(views, desc="Rendering progress")):
-
-        res = render_func(view, gaussians, pipeline, background)
-
-        if target == 'seg':
-            assert precomputed_mask is not None and 'Rendering 2D segmentation mask requires a precomputed mask.'
-            # For render_mask, precomputed_mask needs to be float type (used as colors_precomp)
-            # Convert bool mask to float if needed
-            mask_for_render = precomputed_mask
-            if isinstance(mask_for_render, torch.Tensor) and mask_for_render.dtype == torch.bool:
-                mask_for_render = mask_for_render.float()
+    # 先渲染RGB（renders）
+    if target == 'seg' or target == 'scene':
+        for idx, view in enumerate(tqdm(views, desc=f"Rendering RGB ({name})")):
+            res = render_func(view, gaussians, pipeline, background)
+            rendering = res["render"]
+            gt = view.original_image[0:3, :, :]
+            torchvision.utils.save_image(gt, os.path.join(gts_path, '{0:05d}'.format(idx) + ".png"))
+            torchvision.utils.save_image(rendering, os.path.join(render_path, '{0:05d}'.format(idx) + ".png"))
+    elif 'feature' in target:
+        for idx, view in enumerate(tqdm(views, desc=f"Rendering features ({name})")):
+            res = render_func(view, gaussians, pipeline, background)
+            rendering = res["render"]
+            torch.save(rendering, os.path.join(render_path, '{0:05d}'.format(idx) + ".pt"))
+    elif target == 'xyz':
+        for idx, view in enumerate(tqdm(views, desc=f"Rendering XYZ ({name})")):
+            res = render_func(view, gaussians, pipeline, background)
+            rendering = res["render"]
+            torch.save(rendering, os.path.join(render_path, 'xyz_{0:05d}'.format(idx) + ".pt"))
+    
+    # 然后渲染mask（如果target是seg）
+    if target == 'seg':
+        assert precomputed_mask is not None and 'Rendering 2D segmentation mask requires a precomputed mask.'
+        # For render_mask, precomputed_mask needs to be float type (used as colors_precomp)
+        # Convert bool mask to float if needed
+        mask_for_render = precomputed_mask
+        if isinstance(mask_for_render, torch.Tensor) and mask_for_render.dtype == torch.bool:
+            mask_for_render = mask_for_render.float()
+        
+        for idx, view in enumerate(tqdm(views, desc=f"Rendering masks ({name})")):
             mask_res = render_mask(view, gaussians, pipeline, background, precomputed_mask=mask_for_render)
-
-        rendering = res["render"]
-        gt = view.original_image[0:3, :, :]
-        torchvision.utils.save_image(gt, os.path.join(gts_path, '{0:05d}'.format(idx) + ".png"))
-        if target == 'seg':
             mask = mask_res["mask"]
             mask[mask < 0.5] = 0
             mask[mask != 0] = 1
@@ -91,12 +104,6 @@ def render_set(model_path, name, iteration, views, gaussians, pipeline, backgrou
                     pass
             
             torchvision.utils.save_image(mask, os.path.join(mask_path, '{0:05d}'.format(idx) + ".png"))
-        if target == 'seg' or target == 'scene':
-            torchvision.utils.save_image(rendering, os.path.join(render_path, '{0:05d}'.format(idx) + ".png"))
-        elif 'feature' in target:
-            torch.save(rendering, os.path.join(render_path, '{0:05d}'.format(idx) + ".pt"))
-        elif target == 'xyz':
-            torch.save(rendering, os.path.join(render_path, 'xyz_{0:05d}'.format(idx) + ".pt"))
         
         
         
