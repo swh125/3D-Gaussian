@@ -22,6 +22,14 @@ from argparse import ArgumentParser
 from arguments import ModelParams, PipelineParams, get_combined_args
 
 def render_set(model_path, name, iteration, views, gaussians, pipeline, background, target, precomputed_mask = None):
+    """
+    Render a set of views (train or test).
+    
+    IMPORTANT: The views are already sorted by temporal order (from dataset_readers.py).
+    The rendering order (idx) corresponds to the original video sequence.
+    For 2D masks and RGB renders, the output files are named with idx (00000.png, 00001.png, ...)
+    which preserves the temporal order from the original video.
+    """
     render_path = os.path.join(model_path, name, "ours_{}".format(iteration), "renders")
     gts_path = os.path.join(model_path, name, "ours_{}".format(iteration), "gt")
     mask_path = os.path.join(model_path, name, "ours_{}".format(iteration), "mask")

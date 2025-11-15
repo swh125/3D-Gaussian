@@ -97,7 +97,11 @@ if __name__ == '__main__':
 
     from tqdm import tqdm
     images_masks = {}
-    for i, image_path in tqdm(enumerate(sorted(os.listdir(os.path.join(dataset.source_path, 'images'))))):
+    # IMPORTANT: Sort images by filename to maintain temporal order from original video
+    # This ensures mask scales are computed in the same order as the original video
+    image_list = sorted(os.listdir(os.path.join(dataset.source_path, 'images')))
+    print(f"[scale computation] Processing {len(image_list)} images in temporal order (sorted by filename)")
+    for i, image_path in tqdm(enumerate(image_list)):
         # print(image_path)
         image = cv2.imread(os.path.join(os.path.join(dataset.source_path, 'images'), image_path))
         image = cv2.cvtColor(image, cv2.COLOR_BGR2RGB)

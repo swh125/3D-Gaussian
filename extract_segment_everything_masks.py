@@ -185,8 +185,13 @@ if __name__ == "__main__":
     os.makedirs(output_dir, exist_ok=True)
 
     print("Extracting SAM masks with filtering...")
-
+    
+    # IMPORTANT: Sort images by filename to maintain temporal order from original video
+    # This ensures masks are extracted in the same order as the original video
+    # The order must match the order used in dataset_readers.py for consistency
     image_names = sorted([f for f in os.listdir(image_dir) if not f.startswith('.')])
+    print(f"[mask extraction] Processing {len(image_names)} images in temporal order (sorted by filename)")
+    
     for filename in tqdm(image_names):
         stem = os.path.splitext(filename)[0]
         img = cv2.imread(os.path.join(image_dir, filename))

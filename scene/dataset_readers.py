@@ -195,6 +195,10 @@ def readColmapSceneInfo(path, images, eval, llffhold=8, need_features=False, nee
 
     cam_infos_unsorted = readColmapCameras(cam_extrinsics=cam_extrinsics, cam_intrinsics=cam_intrinsics, images_folder=os.path.join(path, reading_dir), features_folder=os.path.join(path, feature_dir) if need_features else None, masks_folder=os.path.join(path, mask_dir) if need_masks else None, mask_scale_folder=os.path.join(path, mask_scale_dir) if need_masks else None, sample_rate=sample_rate, allow_principle_point_shift = allow_principle_point_shift)
 
+    # IMPORTANT: Sort images by filename to maintain temporal order from original video
+    # This ensures that the order matches the original video sequence
+    # For videos processed by nerfstudio, images are typically named like frame_0001.jpg, frame_0002.jpg, etc.
+    # String sorting will preserve this temporal order
     if not replica:
         cam_infos = sorted(cam_infos_unsorted.copy(), key = lambda x : x.image_name)
     else:
@@ -202,15 +206,20 @@ def readColmapSceneInfo(path, images, eval, llffhold=8, need_features=False, nee
 
     if eval:
         # If test_last_n > 0, use temporal split (first N for train, last test_last_n for test)
+        # IMPORTANT: This ensures the LAST N frames from the original video are used as test set
+        # The order is preserved: first (total - test_last_n) frames = train, last test_last_n frames = test
         # Otherwise, use interval split (every llffhold-th frame for test)
         if test_last_n > 0:
             total = len(cam_infos)
             # Ensure at least 4 frames remain in training set
             effective_test_n = min(test_last_n, max(0, total - 4))
             if effective_test_n > 0:
-                train_cam_infos = cam_infos[:-effective_test_n]
-                test_cam_infos = cam_infos[-effective_test_n:]
+                # Split: first N frames for training, LAST N frames for testing
+                # This preserves the temporal order from the original video
+                train_cam_infos = cam_infos[:-effective_test_n]  # First (total - test_n) frames
+                test_cam_infos = cam_infos[-effective_test_n:]   # LAST test_n frames
                 print(f"[split] Using temporal split: {len(train_cam_infos)} train (first {len(train_cam_infos)} frames), {len(test_cam_infos)} test (last {len(test_cam_infos)} frames)")
+                print(f"[split] IMPORTANT: Test set contains the LAST {len(test_cam_infos)} frames from original video, preserving temporal order")
             else:
                 train_cam_infos = cam_infos
                 test_cam_infos = []
