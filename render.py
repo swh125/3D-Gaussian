@@ -113,7 +113,7 @@ def render_sets(dataset : ModelParams, iteration : int, pipeline : PipelineParam
                 precomputed_mask[precomputed_mask != 1] = 0
                 precomputed_mask = precomputed_mask.bool()
             if isinstance(precomputed_mask, torch.Tensor):
-                if segment and (target == 'scene' or target == 'coarse_seg_everything'):
+                if segment and (target == 'scene' or target == 'coarse_seg_everything' or target == 'seg'):
                     if precomputed_mask.dtype != torch.bool:
                         precomputed_mask = precomputed_mask > 0.5
                     precomputed_mask = precomputed_mask.to(device="cuda", dtype=torch.bool)
