@@ -100,9 +100,9 @@ def edge_refinement(mask: np.ndarray, method='gaussian_blur', **kwargs) -> np.nd
 
 
 def morphological_refinement(mask: np.ndarray, 
-                           opening_kernel: int = 3,
-                           closing_kernel: int = 5,
-                           remove_small: int = 100) -> np.ndarray:
+                           opening_kernel: int = 2,
+                           closing_kernel: int = 3,
+                           remove_small: int = 0) -> np.ndarray:
     """
     形态学细化：去除光晕和噪点
     
@@ -270,12 +270,12 @@ def main():
                                "gaussian_blur", "morphological_gradient", 
                                "distance_transform", "bilateral_filter"],
                        help="Refinement method")
-    parser.add_argument("--opening_kernel", type=int, default=3,
-                       help="Opening kernel size for morphological operations")
-    parser.add_argument("--closing_kernel", type=int, default=5,
-                       help="Closing kernel size for morphological operations")
-    parser.add_argument("--remove_small", type=int, default=100,
-                       help="Remove connected components smaller than this")
+    parser.add_argument("--opening_kernel", type=int, default=2,
+                       help="Opening kernel size for morphological operations (default: 2, conservative)")
+    parser.add_argument("--closing_kernel", type=int, default=3,
+                       help="Closing kernel size for morphological operations (default: 3, conservative)")
+    parser.add_argument("--remove_small", type=int, default=0,
+                       help="Remove connected components smaller than this (default: 0, disabled to preserve IoU)")
     parser.add_argument("--mask_ext", type=str, default=".pt",
                        help="Mask file extension (.pt or .png)")
     
@@ -285,14 +285,16 @@ def main():
     output_dir = Path(args.output_dir)
     image_dir = Path(args.image_dir) if args.image_dir else None
     
-    # 找到所有mask文件
-    mask_files = list(mask_dir.glob(f"*{args.mask_ext}"))
+    # IMPORTANT: Sort mask files by filename to maintain temporal order from original video
+    # This ensures the order matches the original video sequence
+    mask_files = sorted(list(mask_dir.glob(f"*{args.mask_ext}")), key=lambda x: x.name)
     if not mask_files:
         print(f"No mask files found in {mask_dir}")
         return
     
     print(f"Found {len(mask_files)} mask files")
     print(f"Using refinement method: {args.method}")
+    print(f"[order guarantee] Processing masks in temporal order (sorted by filename)")
     
     # 处理每个mask
     for mask_path in tqdm(mask_files, desc="Refining masks"):
