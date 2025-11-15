@@ -50,7 +50,20 @@ def render_set(model_path, name, iteration, views, gaussians, pipeline, backgrou
     # 先渲染RGB（renders）
     if target == 'seg' or target == 'scene':
         for idx, view in enumerate(tqdm(views, desc=f"Rendering RGB ({name})")):
-            res = render_func(view, gaussians, pipeline, background)
+            # 如果是seg目标，使用filtered_mask只渲染mask区域（黑色背景，物体有颜色）
+            if target == 'seg' and precomputed_mask is not None:
+                # filtered_mask为True表示要过滤掉（不渲染），所以非mask区域设为True
+                if isinstance(precomputed_mask, torch.Tensor):
+                    if precomputed_mask.dtype == torch.bool:
+                        filtered_mask = ~precomputed_mask
+                    else:
+                        filtered_mask = ~(precomputed_mask > 0.5)
+                    res = render_func(view, gaussians, pipeline, background, filtered_mask=filtered_mask)
+                else:
+                    res = render_func(view, gaussians, pipeline, background)
+            else:
+                res = render_func(view, gaussians, pipeline, background)
+            
             rendering = res["render"]
             gt = view.original_image[0:3, :, :]
             torchvision.utils.save_image(gt, os.path.join(gts_path, '{0:05d}'.format(idx) + ".png"))
