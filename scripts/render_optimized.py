@@ -30,7 +30,7 @@ from arguments import ModelParams, PipelineParams, get_combined_args
 def render_mask_with_fixed_opacity(viewpoint_camera, pc: GaussianModel, pipe, bg_color: torch.Tensor, 
                                    scaling_modifier=1.0, precomputed_mask=None):
     """
-    优化的render_mask：在渲染前将mask区域的opacity设为1.0，解决雾气问题
+    正常的render_mask：使用原始opacity，只做形态学优化
     """
     import math
     from diff_gaussian_rasterization import GaussianRasterizationSettings, GaussianRasterizer
@@ -66,31 +66,8 @@ def render_mask_with_fixed_opacity(viewpoint_camera, pc: GaussianModel, pipe, bg
     means3D = pc.get_xyz
     means2D = screenspace_points
     
-    # 关键优化：临时修改opacity，将mask区域的opacity设为1.0
-    original_opacity = pc.get_opacity
-    opacity = original_opacity.clone()
-    
-    if precomputed_mask is not None:
-        # precomputed_mask是(N,)或(N,1)形状
-        mask_bool = (precomputed_mask.squeeze() > 0.5)
-        if mask_bool.device != opacity.device:
-            mask_bool = mask_bool.to(opacity.device)
-        # opacity的形状是(N, 1)，需要正确索引
-        if len(opacity.shape) == 2 and opacity.shape[1] == 1:
-            opacity[mask_bool, 0] = 1.0
-        else:
-            opacity[mask_bool] = 1.0
-    else:
-        # 使用pc.get_mask的情况
-        pc_mask = pc.get_mask
-        if pc_mask is not None:
-            mask_bool = (pc_mask.squeeze() > 0.5)
-            if mask_bool.device != opacity.device:
-                mask_bool = mask_bool.to(opacity.device)
-            if len(opacity.shape) == 2 and opacity.shape[1] == 1:
-                opacity[mask_bool, 0] = 1.0
-            else:
-                opacity[mask_bool] = 1.0
+    # 使用原始opacity，不修改（正常优化，不管雾气）
+    opacity = pc.get_opacity
 
     mask = pc.get_mask if precomputed_mask is None else precomputed_mask
     if len(mask.shape) == 1 or mask.shape[-1] == 1:
@@ -166,9 +143,9 @@ def render_set_optimized(model_path, name, iteration, views, gaussians, pipeline
         
         if target == 'seg':
             mask = mask_res["mask"]
-            # 使用更严格的阈值
-            mask[mask < 0.3] = 0
-            mask[mask >= 0.3] = 1
+            # 正常阈值
+            mask[mask < 0.5] = 0
+            mask[mask != 0] = 1
             mask = mask[0, :, :]
             
             # 应用形态学操作
