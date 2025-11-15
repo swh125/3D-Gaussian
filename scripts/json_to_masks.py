@@ -158,9 +158,12 @@ def main():
         mask_path = output_dir / f"{frame_name}_{label}.png"
         mask_img = Image.fromarray(mask)
         mask_img.save(mask_path)
-        print(f"  ✓ 保存到: {mask_path}")
+        # 输出绝对路径
+        abs_path = mask_path.resolve()
+        print(f"  ✓ 保存到: {abs_path}")
     
-    print(f"\n✓ 完成！所有mask保存在: {output_dir}")
+    abs_output_dir = output_dir.resolve()
+    print(f"\n✓ 完成！所有mask保存在: {abs_output_dir}")
 
 
 if __name__ == "__main__":
