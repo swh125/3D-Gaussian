@@ -5,14 +5,20 @@
 同时确保渲染训练集和测试集的2D mask和彩色图像
 """
 
+import sys
+import os
+# 添加项目根目录到路径
+script_dir = os.path.dirname(os.path.abspath(__file__))
+project_root = os.path.dirname(script_dir)
+if project_root not in sys.path:
+    sys.path.insert(0, project_root)
+
 import torch
 from scene import Scene, GaussianModel, FeatureGaussianModel
-import os
 from tqdm import tqdm
 from os import makedirs
 from gaussian_renderer import render, render_contrastive_feature, render_mask
 import torchvision
-import sys
 import importlib
 
 # 导入原始的render模块，但我们要修改render_mask的调用
