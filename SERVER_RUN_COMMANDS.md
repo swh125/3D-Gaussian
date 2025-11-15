@@ -10,9 +10,17 @@ cd /path/to/SegAnyGAussians-2
 git pull origin main
 ```
 
-## 2. 配置并运行一键脚本
+## 2. 运行一键脚本
 
-### 2.1 编辑配置文件
+### 2.1 如果路径已配置好（推荐）
+
+```bash
+# 直接运行（路径已经在脚本中配置好了）
+chmod +x run_with_new_images.sh
+bash run_with_new_images.sh
+```
+
+### 2.2 如果需要修改配置
 
 ```bash
 # 编辑 run_with_new_images.sh，修改以下变量：
@@ -29,13 +37,9 @@ TEST_LAST="40"                         # 测试集数量（后40张）
 AUTO_OPEN_GUI="1"                      # 自动打开GUI (1=是, 0=否)
 ```
 
-### 2.2 运行一键脚本
-
+然后运行：
 ```bash
-# 给脚本添加执行权限（如果还没有）
 chmod +x run_with_new_images.sh
-
-# 运行脚本
 bash run_with_new_images.sh
 ```
 
@@ -67,29 +71,33 @@ python scripts/check_train_test_split.py \
   --test_last_n 40
 ```
 
-## 4. 完整示例命令
-
-假设你的视频在 `/home/user/videos/my_video.mp4`，数据输出到 `/home/user/data/my_video_scene`：
+## 4. 完整示例命令（路径已配置好）
 
 ```bash
-# 1. 更新代码
+# ========== 1. 更新代码 ==========
 cd /path/to/SegAnyGAussians-2
 git pull origin main
 
-# 2. 编辑配置
-nano run_with_new_images.sh
-# 修改：
-#   PHOTOS_PATH="/home/user/videos/my_video.mp4"
-#   TEST_LAST="40"
-#   AUTO_OPEN_GUI="1"
-
-# 3. 运行（这会自动完成所有步骤，包括打开GUI）
+# ========== 2. 直接运行（路径已配置好）==========
+chmod +x run_with_new_images.sh
 bash run_with_new_images.sh
 
-# 4. 验证（在数据处理完成后）
+# ========== 3. 验证（数据处理完成后）==========
+# 注意：替换为你的实际数据路径
 python scripts/verify_temporal_order.py \
-  --data_path /home/user/data/my_video_scene \
+  --data_path /path/to/your/data/scene \
   --test_last_n 40
+```
+
+### 如果需要修改路径
+
+```bash
+# 编辑配置
+nano run_with_new_images.sh
+# 修改 PHOTOS_PATH, TEST_LAST 等变量
+
+# 然后运行
+bash run_with_new_images.sh
 ```
 
 ## 5. 如果不想自动打开GUI
