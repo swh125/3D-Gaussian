@@ -270,8 +270,8 @@ def render_sets_optimized(dataset: ModelParams, iteration: int, pipeline: Pipeli
 
 if __name__ == "__main__":
     parser = ArgumentParser(description="优化的渲染脚本 - 修复mask渲染时的opacity雾气问题")
-    parser.add_argument('--model_path', '-m', type=str, required=True)
-    parser.add_argument('--source_path', '-s', type=str, required=True)
+    model = ModelParams(parser, sentinel=True)
+    pipeline = PipelineParams(parser)
     parser.add_argument('--iteration', type=int, default=30000)
     parser.add_argument('--skip_train', action='store_true')
     parser.add_argument('--skip_test', action='store_true')
@@ -282,7 +282,7 @@ if __name__ == "__main__":
     parser.add_argument('--eval', action='store_true')
     parser.add_argument('--test_last_n', type=int, default=None)
     
-    args = parser.parse_args()
+    args = get_combined_args(parser)
     
     # 创建seg_cfg_args（如果需要）
     if args.target == 'seg':
@@ -294,10 +294,9 @@ if __name__ == "__main__":
                 shutil.copy(cfg_args_path, seg_cfg_args_path)
                 print(f"已创建 seg_cfg_args: {seg_cfg_args_path}")
     
-    # 设置参数
-    dataset = ModelParams(model_path=args.model_path, source_path=args.source_path, 
-                         images='images', eval=args.eval, test_last_n=args.test_last_n)
-    pipeline = PipelineParams()
+    # 提取参数
+    dataset = model.extract(args)
+    pipeline = pipeline.extract(args)
     
     apply_morphology = not args.no_morphology
     
