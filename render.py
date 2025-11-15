@@ -133,7 +133,9 @@ def render_sets(dataset : ModelParams, iteration : int, pipeline : PipelineParam
 
         scene = Scene(dataset, gaussians, feature_gaussians, load_iteration=iteration, shuffle=False, mode='eval', target=target if target != 'xyz' and precomputed_mask is None else 'scene')
 
-        if segment:
+        # Only segment gaussians if target is 'scene' or 'coarse_seg_everything'
+        # For 'seg' target, we use precomputed_mask directly in render_mask, so don't segment gaussians
+        if segment and target != 'seg':
             gaussians.segment(precomputed_mask)
 
         bg_color = [1,1,1] if dataset.white_background else [0, 0, 0]
