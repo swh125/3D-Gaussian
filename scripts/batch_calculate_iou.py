@@ -45,6 +45,34 @@ def main():
         print(f"⚠️  Zip文件不存在: {zip_path}")
         print(f"   尝试使用现有目录: {optimized_mask_dir}")
     
+    # 检查解压后的目录结构
+    extract_dir = desktop / "items_optimized_gui_render"
+    if extract_dir.exists():
+        print(f"\n🔍 检查解压后的目录结构:")
+        print(f"   根目录: {extract_dir}")
+        # 查找mask目录
+        mask_dirs = list(extract_dir.rglob("mask"))
+        if mask_dirs:
+            print(f"   找到 {len(mask_dirs)} 个mask目录:")
+            for md in mask_dirs:
+                print(f"     - {md}")
+                # 列出前几个文件
+                mask_files = sorted(list(md.glob("*.png")))[:5]
+                if mask_files:
+                    print(f"       示例文件: {[f.name for f in mask_files]}")
+            # 使用第一个找到的mask目录
+            optimized_mask_dir = mask_dirs[0]
+            print(f"\n✓ 使用mask目录: {optimized_mask_dir}")
+        else:
+            print(f"   ❌ 未找到mask目录")
+            # 列出所有子目录
+            print(f"   子目录列表:")
+            for item in extract_dir.iterdir():
+                if item.is_dir():
+                    print(f"     - {item.name}")
+    else:
+        print(f"⚠️  解压目录不存在: {extract_dir}")
+    
     gt_json_dir = desktop
     
     print("=" * 80)
