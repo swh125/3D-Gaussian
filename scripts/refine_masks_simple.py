@@ -102,9 +102,9 @@ if __name__ == "__main__":
     MASK_FILES = [
         "book_optimized.pt",
         "juice_optimized.pt",
-        "pencil_case.pt",
-        "umbrella.pt",
-        "glasses.pt"
+        "pencil_case_optimized.pt",
+        "umbrella_optimized.pt",
+        "glasses_optimized.pt"
     ]
     
     print("=" * 60)
