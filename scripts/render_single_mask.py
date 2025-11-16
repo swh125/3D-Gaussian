@@ -45,6 +45,34 @@ def render_single_mask(dataset, pipeline, test_idx, iteration, precomputed_mask_
         closing_kernel: Kernel size for closing operation
     """
     # Load precomputed mask
+    # Try to find the mask file if it's a relative path
+    if not os.path.isabs(precomputed_mask_path) and not os.path.exists(precomputed_mask_path):
+        # Try common locations
+        possible_paths = [
+            precomputed_mask_path,  # Original path
+            os.path.join("./segmentation_res", precomputed_mask_path),  # GUI default location
+            os.path.join(dataset.model_path, precomputed_mask_path),  # Model directory
+            os.path.join(os.path.dirname(dataset.model_path), "segmentation_res", precomputed_mask_path),  # Parent/segmentation_res
+        ]
+        for path in possible_paths:
+            if os.path.exists(path):
+                precomputed_mask_path = path
+                break
+        else:
+            # If still not found, try with just the filename in segmentation_res
+            if not os.path.dirname(precomputed_mask_path):
+                seg_res_path = os.path.join("./segmentation_res", precomputed_mask_path)
+                if os.path.exists(seg_res_path):
+                    precomputed_mask_path = seg_res_path
+    
+    if not os.path.exists(precomputed_mask_path):
+        print(f"Error: Mask file not found: {precomputed_mask_path}")
+        print(f"Tried paths:")
+        print(f"  - {precomputed_mask_path}")
+        print(f"  - ./segmentation_res/{os.path.basename(precomputed_mask_path)}")
+        print(f"  - {os.path.join(dataset.model_path, os.path.basename(precomputed_mask_path))}")
+        return None
+    
     print(f"Loading precomputed mask from: {precomputed_mask_path}")
     precomputed_mask = torch.load(precomputed_mask_path)
     
