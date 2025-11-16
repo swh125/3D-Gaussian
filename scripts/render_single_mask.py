@@ -139,7 +139,8 @@ if __name__ == "__main__":
     parser.add_argument("--opening_kernel", type=int, default=2, help="Kernel size for opening operation")
     parser.add_argument("--closing_kernel", type=int, default=3, help="Kernel size for closing operation")
     
-    args = get_combined_args(parser)
+    # Use get_combined_args with target_cfg_file to avoid target attribute error
+    args = get_combined_args(parser, target_cfg_file="cfg_args")
     
     print("=" * 60)
     print("Rendering Single Mask")
