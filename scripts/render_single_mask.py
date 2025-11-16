@@ -9,19 +9,22 @@ Usage:
         --iteration 30000
 """
 
+import sys
+import os
+# 添加项目根目录到路径（必须在导入其他模块之前）
+script_dir = os.path.dirname(os.path.abspath(__file__))
+project_root = os.path.dirname(script_dir)
+if project_root not in sys.path:
+    sys.path.insert(0, project_root)
+
 import torch
 from scene import Scene, GaussianModel, FeatureGaussianModel
-import os
-import sys
 from tqdm import tqdm
 from os import makedirs
 from gaussian_renderer import render_mask
 import torchvision
 import cv2
 import numpy as np
-
-# Add project root to path
-sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
 from utils.general_utils import safe_state
 from argparse import ArgumentParser
