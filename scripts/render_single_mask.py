@@ -144,7 +144,7 @@ def render_single_mask(dataset, pipeline, test_idx, iteration, precomputed_mask_
             print("Using original mask without morphology")
     
     # Create output directory
-    output_dir = os.path.join(model_path, "test", f"ours_{iteration}", "mask_single")
+    output_dir = os.path.join(dataset.model_path, "test", f"ours_{iteration}", "mask_single")
     makedirs(output_dir, exist_ok=True)
     
     # Save mask
