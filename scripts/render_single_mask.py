@@ -111,7 +111,7 @@ def render_single_mask(dataset, pipeline, test_idx, iteration, precomputed_mask_
     mask = mask_res["mask"]
     mask[mask < 0.5] = 0
     mask[mask != 0] = 1
-    mask = mask[0, :, :].cpu().numpy()
+    mask = mask[0, :, :].detach().cpu().numpy()
     
     # Apply morphological operations if requested
     if apply_morphology:
